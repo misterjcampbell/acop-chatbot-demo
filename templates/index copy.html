@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ACOP Booking Assistant</title>
+  <style>
+    /* Reset & Base */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      height: 100vh;
+    }
+
+    /* Chat Toggle Button */
+    #chat-toggle {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 62px;
+      height: 62px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      font-size: 26px;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 6px 16px rgba(0,123,255,0.3);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+    }
+    #chat-toggle:hover {
+      background: #0056b3;
+      transform: translateY(-3px);
+      box-shadow: 0 8px 20px rgba(0,123,255,0.4);
+    }
+
+    /* Chat Popup */
+    #chat-popup {
+      position: fixed;
+      bottom: 92px;
+      right: 20px;
+      width: 380px;
+      max-width: 92vw;
+      height: 580px;
+      background: white;
+      border-radius: 18px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+      z-index: 999;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+      animation: popIn 0.35s ease-out;
+    }
+    @keyframes popIn {
+      from { opacity: 0; transform: scale(0.9) translateY(20px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    /* Header */
+    #chat-header {
+      background: #007bff;
+      color: white;
+      padding: 16px 18px;
+      font-weight: 600;
+      font-size: 17px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #close-chat {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: background 0.2s;
+    }
+    #close-chat:hover { background: rgba(255,255,255,0.2); }
+
+    /* Chat Box */
+    #chat-box {
+      flex: 1;
+      padding: 18px;
+      overflow-y: auto;
+      background: #f8f9fa;
+    }
+    .msg {
+      margin: 12px 0;
+      padding: 11px 16px;
+      border-radius: 20px;
+      max-width: 80%;
+      word-wrap: break-word;
+      line-height: 1.5;
+      font-size: 15px;
+    }
+    .bot {
+      background: white;
+      color: #2c3e50;
+      border: 1px solid #e2e8f0;
+      align-self: flex-start;
+    }
+    .user {
+      background: #007bff;
+      color: white;
+      margin-left: auto;
+      align-self: flex-end;
+    }
+    .typing {
+      font-style: italic;
+      color: #718096;
+      font-size: 14px;
+    }
+
+    /* Input Area */
+    #chat-input {
+      display: flex;
+      border-top: 1px solid #e2e8f0;
+      background: white;
+    }
+    #txt {
+      flex: 1;
+      padding: 16px;
+      border: none;
+      font-size: 15px;
+      outline: none;
+      resize: none;
+    }
+    #send {
+      padding: 0 22px;
+      background: #007bff;
+      color: white;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #send:hover { background: #0056b3; }
+
+    /* Mobile */
+    @media (max-width: 480px) {
+      #chat-popup {
+        width: 95vw;
+        height: 78vh;
+        bottom: 80px;
+        right: 10px;
+        left: 10px;
+        margin: 0 auto;
+      }
+      #chat-toggle { bottom: 15px; right: 15px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Floating Chat Button -->
+  <button id="chat-toggle">Chat</button>
+
+  <!-- Chat Popup Window -->
+  <div id="chat-popup">
+    <div id="chat-header">
+      <span>ACOP Booking Assistant</span>
+      <button id="close-chat">×</button>
+    </div>
+
+    <div id="chat-box">
+      <div class="msg bot">Hi! I'm here to help you book your assessment call. What's your name?</div>
+    </div>
+
+    <div id="chat-input">
+      <input id="txt" type="text" placeholder="Type your message..." autocomplete="off" />
+      <button id="send">Send</button>
+    </div>
+  </div>
+
+  <script>
+    // Wait for DOM to be fully loaded
+    document.addEventListener('DOMContentLoaded', () => {
+      const toggle = document.getElementById('chat-toggle');
+      const popup = document.getElementById('chat-popup');
+      const close = document.getElementById('close-chat');
+      const box = document.getElementById('chat-box');
+      const input = document.getElementById('txt');
+      const send = document.getElementById('send');
+
+      // Open / Close
+      toggle.addEventListener('click', () => {
+        popup.style.display = 'flex';
+        setTimeout(() => input.focus(), 150);
+      });
+      close.addEventListener('click', () => {
+        popup.style.display = 'none';
+      });
+
+      // Add message to chat
+      function addMessage(text, sender) {
+        const msg = document.createElement('div');
+        msg.className = `msg ${sender}`;
+        msg.textContent = text;
+        box.appendChild(msg);
+        box.scrollTop = box.scrollHeight;
+      }
+
+      // Send message to backend
+      async function sendMessage() {
+        const text = input.value.trim();
+        if (!text) return;
+
+        addMessage(text, 'user');
+        input.value = '';
+
+        // Typing indicator
+        const typing = document.createElement('div');
+        typing.className = 'msg bot typing';
+        typing.id = 'typing';
+        typing.textContent = 'Typing...';
+        box.appendChild(typing);
+
+        try {
+          const res = await fetch('/api/message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text })
+          });
+
+          document.getElementById('typing')?.remove();
+
+          if (res.ok) {
+            const data = await res.json();
+            addMessage(data.reply, 'bot');
+          } else {
+            addMessage('Sorry, something went wrong. Please try again.', 'bot');
+          }
+        } catch (err) {
+          document.getElementById('typing')?.remove();
+          addMessage('Connection failed. Check your internet.', 'bot');
+          console.error('Chat error:', err);
+        }
+      }
+
+      // Event Listeners
+      send.addEventListener('click', sendMessage);
+      input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          sendMessage();
+        }
+      });
+
+      // Optional: Auto-open after 3 seconds (remove if not wanted)
+      // setTimeout(() => toggle.click(), 3000);
+    });
+  </script>
+</body>
+</html>
