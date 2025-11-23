@@ -245,11 +245,8 @@ def api_message():
             reply = "Please use DD/MM/YYYY format (e.g. 24/11/2025)"
 
  elif S["stage"] == "time":
-        time_str = user_input.strip().upper()
-        # Normalize
         t = user_input.strip().upper().replace(" ", "").replace(".", ":").replace("AM","").replace("PM","")
-
-        if ":" not in t: t += ":00"
+	if ":" not in t: t += ":00"
         if len(t)==4: t = "0"+t
 
         if t not in TIME_SLOTS:
