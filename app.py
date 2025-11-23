@@ -1,5 +1,5 @@
 # ================================================
-# app.py – ACOP Assessment Booking Chatbot (FINAL)
+# app.py – ACOP Assessment Booking Chatbot (FINAL – FIXED)
 # Live at: https://acop-chatbot-demo-vxow.onrender.com
 # ================================================
 import os
@@ -61,7 +61,7 @@ def get_booked_times(date_str):
     return booked
 
 # ================================================
-# SMART AVAILABILITY (Sydney time + same-day cutoff)
+# SMART AVAILABILITY
 # ================================================
 def get_available_slots_for_date(date_str):
     target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -74,7 +74,6 @@ def get_available_slots_for_date(date_str):
     for slot in TIME_SLOTS:
         if slot in booked:
             continue
-        # Same-day cutoff
         if date_str == today_str:
             slot_dt = datetime.strptime(f"{date_str} {slot}", "%Y-%m-%d %H:%M")
             slot_dt = slot_dt.replace(tzinfo=SYDNEY_TZ)
@@ -84,7 +83,7 @@ def get_available_slots_for_date(date_str):
     return available
 
 # ================================================
-# ICS + EMAIL (with your branded template)
+# EMAIL + ICS (your branded 60-min template)
 # ================================================
 def build_ics(name, date_str, time_str):
     event_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
@@ -95,16 +94,16 @@ def build_ics(name, date_str, time_str):
     event = Event()
     event.add('summary', 'ACOP Assessment Call')
     event.add('dtstart', event_dt)
-    event.add('dtend', event_dt + timedelta(minutes=60))  # Your change to 60 min
+    event.add('dtend', event_dt + timedelta(minutes=60))
     event.add('description', f"Assessment call with {name}")
     cal.add_component(event)
     return cal.to_ical()
 
 def send_email_with_ics(name, email, date, time_str):
     ics_data = build_ics(name, date, time_str)
+    pretty_date = datetime.strptime(date, "%Y-%m-%d").strftime("%A %d %B %Y")
 
-    # Your branded HTML template
-    html_template = """
+    html = f"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -112,115 +111,39 @@ def send_email_with_ics(name, email, date, time_str):
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ACOP Assessment Booking</title>
   <style>
-    body {
-      margin: 0;
-      padding: 0;
-      background: #f2f2f2;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      color: #2d3748;
-    }
-    .container {
-      max-width: 600px;
-      margin: 20px auto;
-      background: #ffffff;
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-    }
-    .header {
-      background: #004cbf; /* ACOP Navy */
-      color: white;
-      padding: 30px 20px;
-      text-align: center;
-    }
-    .header img {
-      height: 50px;
-      margin-bottom: 10px;
-    }
-    .header h1 {
-      margin: 0;
-      font-size: 24px;
-      font-weight: 600;
-    }
-    .content {
-      padding: 30px;
-      line-height: 1.7;
-    }
-    .booking-details {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 10px;
-      padding: 20px;
-      margin: 20px 0;
-      font-size: 16px;
-    }
-    .booking-details strong {
-      color: #1a365d;
-    }
-    .btn {
-      display: inline-block;
-      background: #0098ea;
-      color: white !important;
-      padding: 14px 28px;
-      text-decoration: none;
-      border-radius: 8px;
-      font-weight: 600;
-      margin: 20px 0;
-      font-size: 16px;
-    }
-    .btn:hover {
-      background: #004cbf;
-    }
-    .footer {
-      background: #004cbf;
-      color: #ffffff;
-      padding: 20px;
-      text-align: center;
-      font-size: 13px;
-    }
-    .footer a {
-      color: #ffffff;
-      text-decoration: none;
-    }
-    @media (max-width: 480px) {
-      .container { margin: 10px; border-radius: 8px; }
-      .header, .content { padding: 20px; }
-    }
+    body {{margin:0;padding:0;background:#f2f2f2;font-family:'Segoe UI',sans-serif;color:#2d3748}}
+    .container {{max-width:600px;margin:20px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 8px 25px rgba(0,0,0,.1)}}
+    .header {{background:#004cbf;color:white;padding:30px 20px;text-align:center}}
+    .header img {{height:50px;margin-bottom:10px}}
+    .header h1 {{margin:0;font-size:24px;font-weight:600}}
+    .content {{padding:30px;line-height:1.7}}
+    .booking-details {{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin:20px 0;font-size:16px}}
+    .booking-details strong {{color:#1a365d}}
+    .btn {{display:inline-block;background:#0098ea;color:white!important;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:600;margin:20px 0;font-size:16px}}
+    .footer {{background:#004cbf;color:#fff;padding:20px;text-align:center;font-size:13px}}
+    .footer a {{color:#fff;text-decoration:none}}
   </style>
 </head>
 <body>
   <div class="container">
-    <!-- Header -->
     <div class="header">
       <img src="https://mailsend-email-assets.mailtrap.io/b3ggvuuwep32geyb8s8dwn7qzh6o.png" alt="ACOP Logo" />
       <h1>Assessment Call Confirmed</h1>
     </div>
-
-    <!-- Content -->
     <div class="content">
       <p>Hi <strong>{name}</strong>,</p>
       <p>Great news! Your <strong>assessment call</strong> with ACOP has been successfully booked.</p>
-
       <div class="booking-details">
-        <p><strong>Date:</strong> {date}</p>
+        <p><strong>Date:</strong> {pretty_date}</p>
         <p><strong>Time:</strong> {time_str}</p>
         <p><strong>Duration:</strong> 60 minutes</p>
       </div>
-
-      <p>An <strong>ICS calendar file</strong> is attached below — just click to add it to your Google Calendar, Outlook, or Apple Calendar.</p>
-
-      <p style="text-align: center;">
-        <a href="#" class="btn">Add to Calendar</a>
-      </p>
-
-      <p><strong>Need to reschedule?</strong><br>
-      Reply to this email or call us at <strong>1300 123 456</strong>.</p>
-
+      <p>An <strong>ICS calendar file</strong> is attached — just click to add it to your calendar.</p>
+      <p style="text-align:center"><a href="#" class="btn">Add to Calendar</a></p>
+      <p><strong>Need to reschedule?</strong><br>Reply to this email or call <strong>1300 123 456</strong>.</p>
       <p>We look forward to speaking with you!</p>
       <p><em>— The ACOP Team</em></p>
     </div>
-
-    <!-- Footer -->
     <div class="footer">
       <p>Australian College of Professionals | <a href="https://acop.edu.au">acop.edu.au</a></p>
       <p>Level 2, 464 Kent Street, Sydney NSW 2000 | enquiries@acop.edu.au</p>
@@ -229,43 +152,33 @@ def send_email_with_ics(name, email, date, time_str):
   </div>
 </body>
 </html>
-    """.format(name=name, date=datetime.strptime(date, "%Y-%m-%d").strftime("%A %d %B %Y"), time_str=time_str)
+    """
 
-    # Send to Student
+    # Student email
     msg = EmailMessage()
-    msg["Subject"] = "Your Assessment Booking — ACOP"
+    msg["Subject"] = "Your ACOP Assessment Call is Confirmed"
     msg["From"] = FROM_EMAIL
     msg["To"] = email
-    msg.set_content("Your assessment call has been booked. Check the HTML version for details.")
-    msg.add_alternative(html_template, subtype='html')
-    msg.add_attachment(ics_data, maintype="application", subtype="ics", filename="booking.ics")
+    msg.set_content("Your booking is confirmed.")
+    msg.add_alternative(html, subtype="html")
+    msg.add_attachment(ics_data, maintype="application", subtype="ics", filename="ACOP-Assessment.ics")
 
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as smtp:
         smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
         smtp.send_message(msg)
 
-    time.sleep(2)
-
-    # Admin copy (plain text)
-    admin_msg = EmailMessage()
-    admin_msg["Subject"] = "New Assessment Booking (Admin Copy)"
-    admin_msg["From"] = FROM_EMAIL
-    admin_msg["To"] = ADMIN_EMAIL
-    admin_msg.set_content(f"""
-New booking received:
-Name: {name}
-Email: {email}
-Date: {date}
-Time: {time_str}
-    """)
+    # Admin copy
+    admin = EmailMessage()
+    admin["Subject"] = f"New Booking: {name}"
+    admin["From"] = FROM_EMAIL
+    admin["To"] = ADMIN_EMAIL
+    admin.set_content(f"Name: {name}\nEmail: {email}\nDate: {pretty_date}\nTime: {time_str}")
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as smtp:
         smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
-        smtp.send_message(admin_msg)
-
-    return True, None
+        smtp.send_message(admin)
 
 # ================================================
-# MAIN CHAT ROUTE (THIS WAS MISSING!)
+# FRONTEND + CHAT LOGIC
 # ================================================
 @app.route("/")
 def index():
@@ -273,259 +186,44 @@ def index():
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ACOP Booking Assistant</title>
-  <style>
-    /* Reset & Base */
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: #f5f7fa;
-      color: #333;
-      height: 100vh;
-    }
-
-    /* Chat Toggle Button */
-    #chat-toggle {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      width: 62px;
-      height: 62px;
-      background: #007bff;
-      color: white;
-      border: none;
-      border-radius: 50%;
-      font-size: 26px;
-      font-weight: bold;
-      cursor: pointer;
-      box-shadow: 0 6px 16px rgba(0,123,255,0.3);
-      z-index: 1000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.3s ease;
-    }
-    #chat-toggle:hover {
-      background: #0056b3;
-      transform: translateY(-3px);
-      box-shadow: 0 8px 20px rgba(0,123,255,0.4);
-    }
-
-    /* Chat Popup */
-    #chat-popup {
-      position: fixed;
-      bottom: 92px;
-      right: 20px;
-      width: 380px;
-      max-width: 92vw;
-      height: 580px;
-      background: white;
-      border-radius: 18px;
-      box-shadow: 0 12px 40px rgba(0,0,0,0.15);
-      z-index: 999;
-      display: none;
-      flex-direction: column;
-      overflow: hidden;
-      animation: popIn 0.35s ease-out;
-    }
-    @keyframes popIn {
-      from { opacity: 0; transform: scale(0.9) translateY(20px); }
-      to { opacity: 1; transform: scale(1) translateY(0); }
-    }
-
-    /* Header */
-    #chat-header {
-      background: #007bff;
-      color: white;
-      padding: 16px 18px;
-      font-weight: 600;
-      font-size: 17px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    #close-chat {
-      background: none;
-      border: none;
-      color: white;
-      font-size: 24px;
-      cursor: pointer;
-      width: 32px;
-      height: 32px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 50%;
-      transition: background 0.2s;
-    }
-    #close-chat:hover { background: rgba(255,255,255,0.2); }
-
-    /* Chat Box */
-    #chat-box {
-      flex: 1;
-      padding: 18px;
-      overflow-y: auto;
-      background: #f8f9fa;
-    }
-    .msg {
-      margin: 12px 0;
-      padding: 11px 16px;
-      border-radius: 20px;
-      max-width: 80%;
-      word-wrap: break-word;
-      line-height: 1.5;
-      font-size: 15px;
-    }
-    .bot {
-      background: white;
-      color: #2c3e50;
-      border: 1px solid #e2e8f0;
-      align-self: flex-start;
-    }
-    .user {
-      background: #007bff;
-      color: white;
-      margin-left: auto;
-      align-self: flex-end;
-    }
-    .typing {
-      font-style: italic;
-      color: #718096;
-      font-size: 14px;
-    }
-
-    /* Input Area */
-    #chat-input {
-      display: flex;
-      border-top: 1px solid #e2e8f0;
-      background: white;
-    }
-    #txt {
-      flex: 1;
-      padding: 16px;
-      border: none;
-      font-size: 15px;
-      outline: none;
-      resize: none;
-    }
-    #send {
-      padding: 0 22px;
-      background: #007bff;
-      color: white;
-      border: none;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    #send:hover { background: #0056b3; }
-
-    /* Mobile */
-    @media (max-width: 480px) {
-      #chat-popup {
-        width: 95vw;
-        height: 78vh;
-        bottom: 80px;
-        right: 10px;
-        left: 10px;
-        margin: 0 auto;
-      }
-      #chat-toggle { bottom: 15px; right: 15px; }
-    }
-  </style>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACOP Booking Assistant</title>
+<style>
+* {box-sizing:border-box;margin:0;padding:0}
+body {font-family:'Segoe UI',sans-serif;background:#f5f7fa;color:#333;height:100vh}
+#chat-toggle {position:fixed;bottom:20px;right:20px;width:62px;height:62px;background:#007bff;color:white;border:none;border-radius:50%;font-size:26px;font-weight:bold;cursor:pointer;box-shadow:0 6px 16px rgba(0,123,255,0.3);z-index:1000;display:flex;align-items:center;justify-content:center;transition:all .3s}
+#chat-toggle:hover {background:#0056b3;transform:translateY(-3px);box-shadow:0 8px 20px rgba(0,123,255,0.4)}
+#chat-popup {position:fixed;bottom:92px;right:20px;width:380px;max-width:92vw;height:580px;background:white;border-radius:18px;box-shadow:0 12px 40px rgba(0,0,0,0.15);z-index:999;display:none;flex-direction:column;overflow:hidden;animation:a .35s}
+@keyframes a {from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+#chat-header {background:#007bff;color:white;padding:16px 18px;font-weight:600;font-size:17px;display:flex;justify-content:space-between;align-items:center}
+#close-chat {background:none;border:none;color:white;font-size:24px;cursor:pointer}
+#chat-box {flex:1;padding:18px;overflow-y:auto;background:#f8f9fa}
+.msg {margin:12px 0;padding:11px 16px;border-radius:20px;max-width:80%;word-wrap:break-word;line-height:1.5;font-size:15px}
+.bot {background:white;color:#2c3e50;border:1px solid #e2e8f0}
+.user {background:#007bff;color:white;margin-left:auto}
+.typing {font-style:italic;color:#718096;font-size:14px}
+#chat-input {display:flex;border-top:1px solid #e2e8f0;background:white}
+#txt {flex:1;padding:16px;border:none;font-size:15px;outline:none}
+#send {padding:0 22px;background:#007bff;color:white;border:none;font-weight:600;cursor:pointer}
+@media(max-width:480px){#chat-popup{width:95vw;height:78vh;bottom:80px;right:10px;left:10px;margin:auto}#chat-toggle{bottom:15px;right:15px}}
+</style>
 </head>
 <body>
-
-  <!-- Floating Chat Button -->
-  <button id="chat-toggle">Chat</button>
-
-  <!-- Chat Popup Window -->
-  <div id="chat-popup">
-    <div id="chat-header">
-      <span>ACOP Booking Assistant</span>
-      <button id="close-chat">×</button>
-    </div>
-
-    <div id="chat-box">
-      <div class="msg bot">Hi! I'm here to help you book your assessment call. What's your name?</div>
-    </div>
-
-    <div id="chat-input">
-      <input id="txt" type="text" placeholder="Type your message..." autocomplete="off" />
-      <button id="send">Send</button>
-    </div>
-  </div>
-
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const toggle = document.getElementById('chat-toggle');
-      const popup = document.getElementById('chat-popup');
-      const close = document.getElementById('close-chat');
-      const box = document.getElementById('chat-box');
-      const input = document.getElementById('txt');
-      const send = document.getElementById('send');
-
-      toggle.addEventListener('click', () => {
-        popup.style.display = 'flex';
-        setTimeout(() => input.focus(), 150);
-      });
-      close.addEventListener('click', () => {
-        popup.style.display = 'none';
-      });
-
-      function addMessage(text, sender) {
-        const msg = document.createElement('div');
-        msg.className = `msg ${sender}`;
-        msg.textContent = text;
-        box.appendChild(msg);
-        box.scrollTop = box.scrollHeight;
-      }
-
-      async function sendMessage() {
-        const text = input.value.trim();
-        if (!text) return;
-
-        addMessage(text, 'user');
-        input.value = '';
-
-        const typing = document.createElement('div');
-        typing.className = 'msg bot typing';
-        typing.id = 'typing';
-        typing.textContent = 'Typing...';
-        box.appendChild(typing);
-
-        try {
-          const res = await fetch('/api/message', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text })
-          });
-
-          document.getElementById('typing')?.remove();
-
-          if (res.ok) {
-            const data = await res.json();
-            addMessage(data.reply, 'bot');
-          } else {
-            addMessage('Sorry, something went wrong. Please try again.', 'bot');
-          }
-        } catch (err) {
-          document.getElementById('typing')?.remove();
-          addMessage('Connection failed. Check your internet.', 'bot');
-          console.error('Chat error:', err);
-        }
-      }
-
-      send.addEventListener('click', sendMessage);
-      input.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          sendMessage();
-        }
-      });
-    });
-  </script>
+<button id="chat-toggle">Chat</button>
+<div id="chat-popup">
+  <div id="chat-header"><span>ACOP Booking Assistant</span><button id="close-chat">×</button></div>
+  <div id="chat-box"><div class="msg bot">Hi! I'm here to help you book your assessment call. What's your name?</div></div>
+  <div id="chat-input"><input id="txt" placeholder="Type your message..." autocomplete="off"><button id="send">Send</button></div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded',()=>{const t=document.getElementById('chat-toggle'),p=document.getElementById('chat-popup'),c=document.getElementById('close-chat'),b=document.getElementById('chat-box'),i=document.getElementById('txt'),s=document.getElementById('send');
+t.onclick=()=>{p.style.display='flex';setTimeout(()=>i.focus(),150)};c.onclick=()=>{p.style.display='none'};
+function a(m,y){const d=document.createElement('div');d.className='msg '+y;d.textContent=m;b.appendChild(d);b.scrollTop=b.scrollHeight}
+async function m(){const x=i.value.trim();if(!x)return;a(x,'user');i.value='';const g=document.createElement('div');g.className='msg bot typing';g.textContent='Typing...';b.appendChild(g);
+try{const r=await fetch('/api/message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:x})});g.remove();
+if(r.ok){const j=await r.json();a(j.reply,'bot')}else a('Error, try again.','bot')}catch{g.remove();a('Network error.','bot')}}
+s.onclick=m;i.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();m()}}}});
+</script>
 </body>
 </html>
 """
@@ -567,9 +265,12 @@ def api_message():
             reply = "Please use DD/MM/YYYY format (e.g. 24/11/2025)"
 
     elif S["stage"] == "time":
-        t = user_input.strip().upper().replace(" ","").replace(".":":").replace("AM","").replace("PM","")
-        if ":" not in t: t += ":00"
-        if len(t) == 4: t = "0" + t
+        # FIXED LINE — this was the syntax error
+        t = user_input.strip().upper().replace(" ", "").replace(".", ":").replace("AM", "").replace("PM", "")
+        if ":" not in t:
+            t += ":00"
+        if len(t) == 4:
+            t = "0" + t
 
         if t not in TIME_SLOTS:
             reply = f"Please choose from: {', '.join(TIME_SLOTS)}"
@@ -586,10 +287,7 @@ def api_message():
             else:
                 S["time"] = t
                 save_booking(S["name"], S["email"], S["date"], t)
-                try:
-                    send_email_with_ics(S["name"], S["email"], S["date"], t)
-                except Exception as e:
-                    print("Email error:", e)
+                send_email_with_ics(S["name"], S["email"], S["date"], t)
                 pretty = datetime.strptime(S["date"], "%Y-%m-%d").strftime("%A %d %B %Y")
                 reply = f"All done! {S['name']}, your call is confirmed for {pretty} at {t} (Sydney time).\n\nCheck your email for the calendar invite!"
                 SESSIONS.pop(session_id, None)
@@ -615,8 +313,8 @@ def api_message():
 # ================================================
 # RUN
 # ================================================
-app.secret_key = os.environ.get("SECRET_KEY", "dev-fallback-key")
 if __name__ == "__main__":
     init_db()
+    app.secret_key = os.environ.get("SECRET_KEY", "fallback-key")
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
