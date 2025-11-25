@@ -127,17 +127,22 @@ def chat():
                 reply = f"Available on {msg}:\n" + ", ".join(free)
         except:
             reply = "Use DD/MM/YYYY and a future weekday."
-    elif S["stage"] == "time":
-        t = msg.strip().upper().replace(" ","")
-        if t not in TIME_SLOTS:
-            reply = f"Choose from: {', '.join(TIME_SLOTS)}"
-        elif is_booked(S["date"], t):
-            reply = "Taken. Try another."
-        else:
-            save_booking(S["name"], S["email"], S["phone"], S["date"], t)
-            send_email(S["name"], S["email"], S["phone"], S["date"], t)
-            reply = f"Confirmed! {datetime.strptime(S['date'],'%Y-%m-%d').strftime('%d %B %Y')} at {t}\nType 'cancel' anytime."
-            S.clear()
+   elif S["stage"] == "time":
+    # Normalize input (handles "9", "9am", "09", etc.)
+    t = user_input.strip().upper().replace(" ", "").replace(".", ":").replace("AM", "").replace("PM", "")
+    if ":" not in t: t += ":00"
+    if len(t) == 4: t = "0" + t
+    if t not in TIME_SLOTS:
+        reply = f"Please choose from: {', '.join(TIME_SLOTS)} (e.g. '09:00')"
+    elif is_booked(S["date"], t):
+        free = [slot for slot in TIME_SLOTS if not is_booked(S["date"], slot)]
+        reply = f"That time is taken. Available: {', '.join(free)}"
+    else:
+        save_booking(S["name"], S["email"], S["phone"], S["date"], t)
+        send_email(S["name"], S["email"], S["phone"], S["date"], t)
+        display_date = datetime.strptime(S["date"], "%Y-%m-%d").strftime("%d %B %Y")
+        reply = f"Confirmed! Your call is on {display_date} at {t}.\n\nType 'cancel' anytime."
+        S.clear()
 
     resp = make_response(jsonify({"reply": reply}))
     resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
