@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify, make_response
 import sqlite3
 import uuid
 from datetime import datetime, timedelta
+import os
 from email.message import EmailMessage
 import smtplib
 from icalendar import Calendar, Event
