@@ -1,3 +1,4 @@
+cat > static/script.js << 'EOF'
 document.addEventListener('DOMContentLoaded', () => {
     const toggle = document.getElementById('chat-toggle');
     const popup = document.getElementById('chat-popup');
@@ -26,7 +27,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const typing = document.createElement('div');
         typing.className = 'msg bot';
         typing.textContent = 'Typing...';
-        typing.id = 'typing';
         box.appendChild(typing);
 
         try {
@@ -40,10 +40,11 @@ document.addEventListener('DOMContentLoaded', () => {
             addMessage(data.reply, 'bot');
         } catch (e) {
             typing.remove();
-            addMessage('Connection error. Please try again.', 'bot');
+            addMessage('Sorry, something went wrong.', 'bot');
         }
     }
 
     send.onclick = sendMessage;
-    input.onkeypress = e => { if (e.key === 'Enter') { e.preventDefault(); sendMessage(); }};
+    input.addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
 });
+EOF

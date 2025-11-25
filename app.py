@@ -1,4 +1,4 @@
-# app.py – FINAL WORKING VERSION (tested on Render 1 minute ago)
+cat > app.py << 'EOF'
 from flask import Flask, render_template, request, jsonify, make_response
 import sqlite3, uuid, os
 from datetime import datetime, timedelta
@@ -7,7 +7,8 @@ import smtplib
 from icalendar import Calendar, Event
 
 app = Flask(__name__)
-app.secret_key = "acop-2025-final"
+app.secret_key
+_key = "acop-2025-final"
 DB_FILE = "bookings.db"
 TIME_SLOTS = ["09:00", "11:00", "15:30"]
 SESSIONS = {}
@@ -46,14 +47,7 @@ def send_email(name, email, phone, date, time):
     msg["To"] = email
     msg["Subject"] = "Your ACOP Assessment Call is Confirmed"
     msg.set_content("Confirmed!")
-    # Simple fallback if email template missing
-    html = f"""
-    <h2>Hi {name}!</h2>
-    <p>Your assessment call is confirmed:</p>
-    <p><strong>{datetime.strptime(date,'%Y-%m-%d').strftime('%d %B %Y')} at {time}</strong></p>
-    <p>We look forward to speaking with you!</p>
-    <p>— The ACOP Team</p>
-    """
+    html = f"<h2>Hi {name}!</h2><p>Your call is confirmed for {datetime.strptime(date,'%Y-%m-%d').strftime('%d %B %Y')} at {time}.</p><p>— ACOP Team</p>"
     msg.add_alternative(html, subtype="html")
     msg.add_attachment(cal.to_ical(), maintype="application", subtype="ics", filename="ACOP-Call.ics")
 
@@ -79,10 +73,9 @@ def chat():
         conn.execute("DELETE FROM bookings WHERE email=? AND date=?", (S.get("email"), S.get("date")))
         conn.commit()
         conn.close()
-        reply = "Booking cancelled.\nWhich date? (e.g. 27/11/2025)"
+        reply = "Booking cancelled. Which date? (e.g. 27/11/2025)"
         S["date"] = S["time"] = None
         S["stage"] = "date"
-
     elif S["stage"] == "name":
         if len(msg) < 2 or any(c.isdigit() for c in msg):
             reply = "Please enter a valid name."
@@ -90,7 +83,6 @@ def chat():
             S["name"] = msg.title()
             S["stage"] = "email"
             reply = f"Thanks {S['name']}! What's your email?"
-
     elif S["stage"] == "email":
         if "@" not in msg or "." not in msg:
             reply = "Please enter a valid email."
@@ -98,7 +90,6 @@ def chat():
             S["email"] = msg.lower()
             S["stage"] = "phone"
             reply = "Your phone number?"
-
     elif S["stage"] == "phone":
         if len(msg.replace(" ","").replace("-","")) < 8:
             reply = "Please enter a valid phone number."
@@ -106,7 +97,6 @@ def chat():
             S["phone"] = msg
             S["stage"] = "date"
             reply = "Which date? (e.g. 27/11/2025)"
-
     elif S["stage"] == "date":
         try:
             d = datetime.strptime(msg, "%d/%m/%Y")
@@ -115,24 +105,23 @@ def chat():
             S["date"] = d.strftime("%Y-%m-%d")
             free = [t for t in TIME_SLOTS if not is_booked(S["date"], t)]
             if not free:
-                reply = "That day is fully booked. Please pick another date."
+                reply = "That day is fully booked. Another date?"
                 S["date"] = None
             else:
                 S["stage"] = "time"
-                reply = f"Available times on {msg}:\n" + ", ".join(free)
+                reply = f"Available on {msg}:\n" + ", ".join(free)
         except:
-            reply = "Please use DD/MM/YYYY format and a future weekday."
-
+            reply = "Use DD/MM/YYYY and a future weekday."
     elif S["stage"] == "time":
-        t = msg.strip().upper().replace(" ","").replace(".","")
+        t = msg.strip().upper().replace(" ","")
         if t not in TIME_SLOTS:
-            reply = f"Please choose from: {', '.join(TIME_SLOTS)}"
+            reply = f"Choose from: {', '.join(TIME_SLOTS)}"
         elif is_booked(S["date"], t):
-            reply = "That time is now taken. Please choose another."
+            reply = "Taken. Try another."
         else:
             save_booking(S["name"], S["email"], S["phone"], S["date"], t)
             send_email(S["name"], S["email"], S["phone"], S["date"], t)
-            reply = f"Confirmed! Your call is on {datetime.strptime(S['date'],'%Y-%m-%d').strftime('%d %B %Y')} at {t}\nType 'cancel' anytime."
+            reply = f"Confirmed! {datetime.strptime(S['date'],'%Y-%m-%d').strftime('%d %B %Y')} at {t}\nType 'cancel' anytime."
             S.clear()
 
     resp = make_response(jsonify({"reply": reply}))
@@ -141,3 +130,4 @@ def chat():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+EOF
