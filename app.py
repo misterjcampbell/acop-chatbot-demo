@@ -1,6 +1,4 @@
-# -------------------------------------------------
-# ACOP BOOKING CHATBOT – FINAL BULLETPROOF VERSION
-# -------------------------------------------------
+# app.py
 import os
 import uuid
 import sqlite3
@@ -9,15 +7,14 @@ import csv
 import io
 from datetime import datetime, timedelta
 from email.message import EmailMessage
-from flask import Flask, request, jsonify, make_response, session, redirect, url_for
+from flask import Flask, request, jsonify, make_response, render_template, session, redirect, url_for
 from functools import wraps
-from textwrap import dedent
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "prod-key-change-me")
+app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-production-2025")
 DB_FILE = "bookings.db"
 
-# ----- Mailtrap (test) -----
+# Mailtrap (replace later with real SMTP)
 SMTP_SERVER = "sandbox.smtp.mailtrap.io"
 SMTP_PORT = 2525
 SMTP_USERNAME = "17d873b3a11a38"
@@ -25,16 +22,12 @@ SMTP_PASSWORD = "453b9c740a0729"
 FROM_EMAIL = "enquiries@acop.edu.au"
 ADMIN_EMAIL = "johnc@acop.edu.au"
 
-# ----- Admin Login -----
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "acopadmin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "YourStrongPass2025!")
 
-# ----- Booking Rules -----
 TIME_SLOTS = ["09:00", "11:00", "15:30"]
 SESSIONS = {}
 
-# -------------------------------------------------
-# DATABASE
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
@@ -45,7 +38,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Add phone to save_booking
 def save_booking(name, email, phone, date, time_slot):
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
@@ -58,30 +50,21 @@ def is_time_booked(date, time_slot):
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
     cur.execute("SELECT 1 FROM bookings WHERE date = ? AND time = ?", (date, time_slot))
-    result = cur.fetchone() is not None
-    conn.close()
-    return result
+    return cur.fetchone() is not None
 
 def get_booked_times(date):
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
     cur.execute("SELECT time FROM bookings WHERE date = ?", (date,))
-    result = [row[0] for row in cur.fetchall()]
-    conn.close()
-    return result
+    return [row[0] for row in cur.fetchall()]
 
-# -------------------------------------------------
-# PAST DATE BLOCKER
 def is_past_date(date_str):
     try:
         selected = datetime.strptime(date_str, "%Y-%m-%d")
-        today = datetime.now().date()
-        return selected.date() < today
+        return selected.date() < datetime.now().date()
     except:
         return False
 
-# -------------------------------------------------
-# ICS + EMAIL (beautiful version)
 def build_ics(name, date_str, time_str):
     from icalendar import Calendar, Event
     event_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
@@ -135,14 +118,14 @@ def send_email_with_ics(name, email, phone, date, time_str):
                 </div>
                 <p>An ICS calendar file is attached — just click to add it to your calendar.</p>
                 <p style="text-align:center;"><a href="#" class="btn">Add to Calendar</a></p>
-                <p><strong>Need to reschedule?</strong><br>Reply to this email or call us at <strong>1300 88 48 10</strong>.</p>
+                <p><strong>Need to reschedule?</strong><br>Call us at <strong>1300 88 48 10</strong>.</p>
                 <p>We look forward to speaking with you!</p>
                 <p><em>— The ACOP Team</em></p>
             </div>
             <div class="footer">
                 <p>Australian College of Professionals | <a href="https://acop.edu.au">acop.edu.au</a></p>
                 <p>Level 2, 464 Kent Street, Sydney NSW 2000 | enquiries@acop.edu.au</p>
-                <p>&copy; 2025 ACOP. All rights reserved.</p>
+                <p>© 2025 ACOP. All rights reserved.</p>
             </div>
         </div>
     </body>
@@ -171,8 +154,11 @@ def send_email_with_ics(name, email, phone, date, time_str):
         smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
         smtp.send_message(admin_msg)
 
-# -------------------------------------------------
-# CHAT API – BULLETPROOF LOGIC
+# Routes
+@app.route("/")
+def index():
+    return render_template("index.html")
+
 @app.route("/api/message", methods=["POST"])
 def api_message():
     user_input = request.json.get("message", "").strip()
@@ -183,25 +169,23 @@ def api_message():
     S = SESSIONS[session_id]
     reply = ""
 
-    # CANCEL (anytime)
     if user_input.lower() == "cancel":
-        if S.get("name") and S.get("date") and S.get("time"):
+        if S.get("date") and S.get("time"):
             conn = sqlite3.connect(DB_FILE)
             cur = conn.cursor()
             cur.execute("DELETE FROM bookings WHERE email = ? AND date = ? AND time = ?", (S["email"], S["date"], S["time"]))
             conn.commit()
             conn.close()
-            reply = "Your booking has been cancelled successfully.\n\nWhich date would you like to book? (e.g. 27/11/2025)"
+            reply = "Booking cancelled.\n\nWhich date would you like to book? (e.g. 27/11/2025)"
             S["date"] = S["time"] = None
             S["stage"] = "date"
         else:
-            reply = "No active booking. Which date would you like? (e.g. 27/11/2025)"
+            reply = "Which date would you like? (e.g. 27/11/2025)"
             S["stage"] = "date"
         resp = make_response(jsonify({"reply": reply}))
         resp.set_cookie("session_id", session_id, httponly=True, samesite="Lax")
         return resp
 
-    # STAGE: NAME
     if S["stage"] == "name":
         if len(user_input) < 2 or any(c.isdigit() for c in user_input):
             reply = "Please enter a valid name (no numbers)."
@@ -210,17 +194,15 @@ def api_message():
             S["stage"] = "email"
             reply = f"Thanks, {S['name']}! What's your email address?"
 
-    # STAGE: EMAIL
     elif S["stage"] == "email":
         email = user_input.lower().strip()
         if "@" not in email or "." not in email or len(email) < 5:
-            reply = "Please enter a valid email address (e.g. john@example.com)"
+            reply = "Please enter a valid email (e.g. john@example.com)"
         else:
             S["email"] = email
             S["stage"] = "phone"
             reply = "And your contact number? (e.g. 0412 345 678)"
 
-    # STAGE: PHONE
     elif S["stage"] == "phone":
         phone = user_input.strip()
         if len(phone.replace(" ", "").replace("-", "")) < 8:
@@ -228,28 +210,26 @@ def api_message():
         else:
             S["phone"] = phone
             S["stage"] = "date"
-            reply = "Which date would you like? (e.g. 27/11/2025)"
+            reply = "Which date? (e.g. 27/11/2025)"
 
-    # STAGE: DATE
     elif S["stage"] == "date":
         try:
             d = datetime.strptime(user_input.strip(), "%d/%m/%Y")
             if d.weekday() >= 5:
-                reply = "We are closed on weekends. Please choose Monday–Friday."
+                reply = "We are closed weekends. Please choose Monday–Friday."
             elif is_past_date(d.strftime("%Y-%m-%d")):
-                reply = "You cannot book a date in the past. Please choose a future date."
+                reply = "You cannot book past dates. Please choose a future date."
             else:
                 S["date"] = d.strftime("%Y-%m-%d")
                 free = [t for t in TIME_SLOTS if not is_time_booked(S["date"], t)]
                 if not free:
-                    reply = "Sorry, that day is fully booked. Please choose another date."
+                    reply = "That day is full. Please pick another date."
                 else:
                     S["stage"] = "time"
                     reply = f"Available times on {user_input}:\n{', '.join(free)}"
-        except ValueError:
+        except:
             reply = "Please use DD/MM/YYYY format (e.g. 27/11/2025)"
 
-    # STAGE: TIME
     elif S["stage"] == "time":
         t = user_input.strip().upper().replace(" ", "").replace(".", ":").replace("AM", "").replace("PM", "")
         if ":" not in t: t += ":00"
@@ -257,29 +237,23 @@ def api_message():
         if t not in TIME_SLOTS:
             reply = f"Please choose from: {', '.join(TIME_SLOTS)}"
         elif is_time_booked(S["date"], t):
-            reply = "That time is no longer available. Please pick another or choose a different date."
+            reply = "That time is taken. Please choose another."
             S["stage"] = "date"
         else:
             S["time"] = t
             save_booking(S["name"], S["email"], S["phone"], S["date"], S["time"])
-            try:
-                send_email_with_ics(S["name"], S["email"], S["phone"], S["date"], S["time"])
-            except Exception as e:
-                print("Email error:", e)
+            send_email_with_ics(S["name"], S["email"], S["phone"], S["date"], S["time"])
             display_date = datetime.strptime(S["date"], "%Y-%m-%d").strftime("%d %B %Y")
-            reply = f"Confirmed! Your call is on {display_date} at {S['time']}.\n\nType 'cancel' anytime to reschedule."
+            reply = f"Confirmed! Your call is on {display_date} at {S['time']}.\n\nType 'cancel' to reschedule."
 
     resp = make_response(jsonify({"reply": reply}))
     resp.set_cookie("session_id", session_id, httponly=True, samesite="Lax")
     return resp
 
-# -------------------------------------------------
-# Keep your existing admin routes and index() as before
-# (or switch to external templates later — this works perfectly now)
-
-# ... [keep your @app.route("/"), admin routes, etc. from previous version]
+# Admin routes (unchanged)
+@app.route("/login", methods=["GET", "POST"]) 
+# ... keep your existing login/admin/export routes from before
 
 if __name__ == "__main__":
     init_db()
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
