@@ -1,15 +1,13 @@
-import os
 from flask import Flask, render_template, request, jsonify, make_response
 import sqlite3
 import uuid
 from datetime import datetime, timedelta
-import os
 from email.message import EmailMessage
 import smtplib
 from icalendar import Calendar, Event
 
 app = Flask(__name__)
-app.secret_key = "acop-2025"
+app.secret_key = "acop-2025-final"
 DB_FILE = "bookings.db"
 TIME_SLOTS = ["09:00", "11:00", "15:30"]
 SESSIONS = {}
@@ -136,3 +134,4 @@ def chat():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+EOF
