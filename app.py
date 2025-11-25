@@ -1,25 +1,29 @@
-cat > app.py << 'EOF'
 from flask import Flask, render_template, request, jsonify, make_response
-import sqlite3, uuid, os
+import sqlite3
+import uuid
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 import smtplib
 from icalendar import Calendar, Event
 
 app = Flask(__name__)
-app.secret_key
-_key = "acop-2025-final"
+app.secret_key = "acop-2025"
 DB_FILE = "bookings.db"
 TIME_SLOTS = ["09:00", "11:00", "15:30"]
 SESSIONS = {}
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
-    conn.execute("""CREATE TABLE IF NOT EXISTS bookings (
-        name TEXT, email TEXT, phone TEXT, date TEXT, time TEXT)""")
+    conn.execute("CREATE TABLE IF NOT EXISTS bookings (name TEXT, email TEXT, phone TEXT, date TEXT, time TEXT)")
     conn.commit()
     conn.close()
 init_db()
+
+def save_booking(name, email, phone, date, time):
+    conn = sqlite3.connect(DB_FILE)
+    conn.execute("INSERT INTO bookings VALUES (?, ?, ?, ?, ?)", (name, email, phone, date, time))
+    conn.commit()
+    conn.close()
 
 def is_booked(date, time):
     conn = sqlite3.connect(DB_FILE)
@@ -47,7 +51,7 @@ def send_email(name, email, phone, date, time):
     msg["To"] = email
     msg["Subject"] = "Your ACOP Assessment Call is Confirmed"
     msg.set_content("Confirmed!")
-    html = f"<h2>Hi {name}!</h2><p>Your call is confirmed for {datetime.strptime(date,'%Y-%m-%d').strftime('%d %B %Y')} at {time}.</p><p>— ACOP Team</p>"
+    html = f"<h2>Hi {name}!</h2><p>Your call is on {datetime.strptime(date,'%Y-%m-%d').strftime('%d %B %Y')} at {time}.</p><p>— ACOP Team</p>"
     msg.add_alternative(html, subtype="html")
     msg.add_attachment(cal.to_ical(), maintype="application", subtype="ics", filename="ACOP-Call.ics")
 
@@ -130,4 +134,3 @@ def chat():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-EOF
