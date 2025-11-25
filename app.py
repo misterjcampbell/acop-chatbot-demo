@@ -30,7 +30,9 @@ init_db()
 
 def save_booking(name, email, phone, date, time):
     conn = sqlite3.connect(DB_FILE)
-    conn.execute("INSERT INTO bookings VALUES (?, ?, ?, ?, ?)", (name, email, phone, date, time))
+    cur = conn.cursor()
+    cur.execute("INSERT INTO bookings (name, email, phone, date, time) VALUES (?, ?, ?, ?, ?)",
+                (name, email, phone, date, time))
     conn.commit()
     conn.close()
 
