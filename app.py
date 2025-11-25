@@ -15,7 +15,15 @@ SESSIONS = {}
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
-    conn.execute("CREATE TABLE IF NOT EXISTS bookings (name TEXT, email TEXT, phone TEXT, date TEXT, time TEXT)")
+    cur = conn.cursor()
+    cur.execute("""CREATE TABLE IF NOT EXISTS bookings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        date TEXT NOT NULL,
+        time TEXT NOT NULL
+    )""")
     conn.commit()
     conn.close()
 init_db()
