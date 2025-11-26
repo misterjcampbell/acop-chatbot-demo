@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, make_response
+from flask import Flask, render_template, request, jsonify, make_response, session, redirect, url_for, flash
 import sqlite3
 import uuid
 import os
@@ -11,11 +11,16 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
-app.secret_key = "acop-2025-final"
+# keep this secret in Render secrets in production
+app.secret_key = os.environ.get("FLASK_SECRET", "acop-2025-final")
 
 DB_FILE = "bookings.db"
 TIME_SLOTS = ["09:00", "11:00", "15:30"]
 SESSIONS = {}
+
+# Admin credentials: read from env, fallback to values you provided
+ADMIN_USER = os.getenv("ADMIN_USER", "Admin")
+ADMIN_PASS = os.getenv("ADMIN_PASS", "Acop2025!")
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -40,6 +45,13 @@ def save_booking(name, email, phone, date, time):
     cur = conn.cursor()
     cur.execute("INSERT INTO bookings (name, email, phone, date, time) VALUES (?, ?, ?, ?, ?)",
                 (name, email, phone, date, time))
+    conn.commit()
+    conn.close()
+
+def delete_booking_by_id(booking_id):
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
     conn.commit()
     conn.close()
 
@@ -93,23 +105,72 @@ def send_email(name, email, phone, date, time):
     except Exception as e:
         app.logger.exception("Failed to send email: %s", e)
 
+# -----------------------
+# ROUTES
+# -----------------------
 @app.route("/")
 def index():
-    # Renders templates/index.html; ensure templates/index.html exists and has no broken HTML comments
     return render_template("index.html")
 
+# -----------------------
+# ADMIN AUTH ROUTES
+# -----------------------
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    # if already logged in, send to /admin
+    if session.get("admin_logged_in"):
+        return redirect(url_for("admin"))
+
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        if username == ADMIN_USER and password == ADMIN_PASS:
+            session["admin_logged_in"] = True
+            session["admin_username"] = username
+            return redirect(url_for("admin"))
+        else:
+            error = "Invalid credentials"
+            # no flash dependency required, render error directly
+
+    return render_template("admin_login.html", error=error)
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("admin_logged_in", None)
+    session.pop("admin_username", None)
+    return redirect(url_for("admin_login"))
+
+def require_admin(fn):
+    from functools import wraps
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not session.get("admin_logged_in"):
+            return redirect(url_for("admin_login"))
+        return fn(*args, **kwargs)
+    return wrapper
+
 @app.route("/admin")
+@require_admin
 def admin():
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
     cur.execute("SELECT id, name, email, phone, date, time FROM bookings ORDER BY date, time")
     rows = cur.fetchall()
     conn.close()
-    return render_template("admin.html", bookings=rows)
+    return render_template("admin.html", bookings=rows, admin_user=session.get("admin_username"))
 
+@app.route("/admin/delete/<int:booking_id>", methods=["POST"])
+@require_admin
+def admin_delete(booking_id):
+    delete_booking_by_id(booking_id)
+    return redirect(url_for("admin"))
+
+# -----------------------
+# CHAT ROUTE (unchanged)
+# -----------------------
 @app.route("/api/message", methods=["POST"])
 def chat():
-    # JSON endpoint used by the frontend popup
     data = request.get_json(silent=True) or {}
     msg = data.get("message", "").strip()
     sid = request.cookies.get("sid") or str(uuid.uuid4())
@@ -182,7 +243,6 @@ def chat():
                 reply = "That time is now taken. Please choose another."
             else:
                 save_booking(S["name"], S["email"], S["phone"], S["date"], t)
-                # send email but do not block
                 send_email(S["name"], S["email"], S["phone"], S["date"], t)
                 nice_date = datetime.strptime(S["date"], "%Y-%m-%d").strftime("%d %B %Y")
                 reply = f"Confirmed! Your call is on {nice_date} at {t}\n\nType 'cancel' anytime to change it."
@@ -196,5 +256,4 @@ def chat():
     return resp
 
 if __name__ == "__main__":
-    # For Render: use gunicorn in production. This runs only for local debugging.
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
