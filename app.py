@@ -305,8 +305,9 @@ def chat():
             elif is_booked(S["date"], t):
                 reply = "That time is now taken. Please choose another."
             else:
-                save_booking(S["name"], S["email"], S["phone"], S["date"], t)
-                send_email(S["name"], S["email"], S["phone"], S["date"], t)
+           save_booking(S["name"], S["email"], S["phone"], S["date"], t)
+send_email(S["name"], S["email"], S["phone"], S["date"], t)
+notify_admin(S["name"], S["email"], S["phone"], S["date"], t)
                 nice_date = datetime.strptime(S["date"], "%Y-%m-%d").strftime("%d %B %Y")
                 reply = f"Confirmed! Your call is on {nice_date} at {t}\n\nType 'cancel' anytime to change it."
                 S.clear()
