@@ -165,6 +165,34 @@ def admin():
 def admin_delete(booking_id):
     delete_booking_by_id(booking_id)
     return redirect(url_for("admin"))
+import csv
+from flask import Response
+
+@app.route("/admin/export", methods=["GET"])
+@require_admin
+def export_csv():
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("SELECT id, name, email, phone, date, time FROM bookings ORDER BY date, time")
+    rows = cur.fetchall()
+    conn.close()
+
+    # Create CSV output in memory
+    def generate():
+        header = ["ID", "Name", "Email", "Phone", "Date", "Time"]
+        yield ",".join(header) + "\n"
+        for row in rows:
+            yield ",".join(str(col) for col in row) + "\n"
+
+    # Return as downloadable file
+    return Response(
+        generate(),
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=acop_bookings.csv"
+        }
+    )
+
 
 # -----------------------
 # CHAT ROUTE (unchanged)
