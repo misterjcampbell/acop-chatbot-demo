@@ -1,53 +1,28 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const toggle = document.getElementById('chat-toggle');
-    const popup = document.getElementById('chat-popup');
-    const close = document.getElementById('close-chat');
-    const box = document.getElementById('chat-box');
-    const input = document.getElementById('txt');
-    const send = document.getElementById('send');
+async function sendMessage() {
+    const inputBox = document.getElementById("user-input");
+    const msg = inputBox.value.trim();
+    if (!msg) return;
 
-    toggle.onclick = () => { popup.style.display = 'flex'; input.focus(); };
-    close.onclick = () => { popup.style.display = 'none'; };
+    showMessage("user", msg);
+    inputBox.value = "";
 
-    function addMessage(text, sender) {
-        const div = document.createElement('div');
-        div.className = `msg ${sender}`;
-        div.textContent = text;
-        box.appendChild(div);
-        box.scrollTop = box.scrollHeight;
-    }
+    const response = await fetch("/api/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg })
+    });
 
-    async function sendMessage() {
-        const text = input.value.trim();
-        if (!text) return;
-        addMessage(text, 'user');
-        input.value = '';
+    const data = await response.json();
+    showMessage("bot", data.reply);
+}
 
-        const typing = document.createElement('div');
-        typing.className = 'msg bot typing';
-        typing.textContent = 'Typing...';
-        typing.id = 'typing';
-        box.appendChild(typing);
+function showMessage(sender, text) {
+    const chat = document.getElementById("messages");
 
-        try {
-            const res = await fetch('/api/message', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({message: text})
-            });
-            typing.remove();
-            if (res.ok) {
-                const data = await res.json();
-                addMessage(data.reply, 'bot');
-            } else {
-                addMessage('Error. Try again.', 'bot');
-            }
-        } catch (e) {
-            typing.remove();
-            addMessage('Connection error.', 'bot');
-        }
-    }
+    const bubble = document.createElement("div");
+    bubble.className = sender === "user" ? "msg user" : "msg bot";
+    bubble.innerText = text;
 
-    send.onclick = sendMessage;
-    input.onkeypress = e => { if (e.key === 'Enter') { e.preventDefault(); sendMessage(); } };
-});
+    chat.appendChild(bubble);
+    chat.scrollTop = chat.scrollHeight;
+}
