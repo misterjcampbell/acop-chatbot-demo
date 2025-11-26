@@ -104,7 +104,42 @@ def send_email(name, email, phone, date, time):
         app.logger.info("Email sent to %s", email)
     except Exception as e:
         app.logger.exception("Failed to send email: %s", e)
+def notify_admin(name, email, phone, date, time):
+    msg = EmailMessage()
+    msg["From"] = "enquiries@acop.edu.au"
+    msg["To"] = "johnc@acop.edu.au"  # Admin email
+    msg["Subject"] = "New ACOP Assessment Booking"
 
+    pretty_date = datetime.strptime(date, "%Y-%m-%d").strftime("%d %B %Y")
+
+    content = (
+        f"A new booking has been made:\n\n"
+        f"Name: {name}\n"
+        f"Email: {email}\n"
+        f"Phone: {phone}\n"
+        f"Date: {pretty_date}\n"
+        f"Time: {time}\n\n"
+        "Sent automatically by ACOP Booking Bot."
+    )
+    msg.set_content(content)
+
+    # HTML version
+    html = f"""
+        <h2>New Booking Received</h2>
+        <p><strong>Name:</strong> {name}</p>
+        <p><strong>Email:</strong> {email}</p>
+        <p><strong>Phone:</strong> {phone}</p>
+        <p><strong>Date:</strong> {pretty_date}</p>
+        <p><strong>Time:</strong> {time}</p>
+        <br>
+        <p>This notification was sent automatically by the ACOP Booking System.</p>
+    """
+    msg.add_alternative(html, subtype="html")
+
+    # Send via Mailtrap
+    with smtplib.SMTP("sandbox.smtp.mailtrap.io", 2525) as s:
+        s.login("17d873b3a11a38", "453b9c740a0729")
+        s.send_message(msg)
 # -----------------------
 # ROUTES
 # -----------------------
