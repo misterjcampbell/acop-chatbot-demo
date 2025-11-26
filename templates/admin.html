@@ -16,7 +16,9 @@
 <body>
     <div class="topbar">
         <h1>All Bookings</h1>
-        <div>
+        <div><a href="/admin/export">
+    <button class="logout" style="background:#27ae60;">Download CSV</button>
+</a>
             <span>Signed in as <strong>{{ admin_user }}</strong></span>
             <a href="/admin/logout"><button class="logout">Logout</button></a>
         </div>
