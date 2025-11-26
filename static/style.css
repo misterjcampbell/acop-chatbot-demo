@@ -1,117 +1,116 @@
+/* static/style.css */
 body {
-    margin: 0;
-    font-family: Arial, sans-serif;
-    background: #f2f2f2;
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f5f7fa;
 }
 
-/* === ACOP Branding === */
-#acop-header {
-    background: #003366;
-    color: white;
-    padding: 20px;
-    text-align: center;
+/* Header */
+.acop-header {
+  background: #003366;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+}
+.acop-logo { height: 40px; margin-left: 12px; }
+.acop-title { font-weight: bold; font-size: 18px; margin-left: 6px; }
+
+/* Chat button */
+#openChatBtn {
+  position: fixed;
+  bottom: 22px;
+  right: 22px;
+  background: #0073c8;
+  color: #fff;
+  border: none;
+  border-radius: 28px;
+  padding: 12px 18px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+  cursor: pointer;
+  z-index: 9999;
 }
 
-#acop-logo {
-    height: 60px;
-    margin-bottom: 10px;
+/* Popup */
+#chatPopup {
+  display: none;
+  position: fixed;
+  bottom: 84px;
+  right: 22px;
+  width: 360px;
+  height: 520px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 9999;
 }
 
-/* === Chat Button === */
-#chat-btn {
-    position: fixed;
-    bottom: 25px;
-    right: 25px;
-    background: #003366;
-    color: white;
-    border: none;
-    padding: 14px 20px;
-    border-radius: 50px;
-    cursor: pointer;
-    font-size: 16px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.3);
+#chatHeader {
+  background: #003366;
+  color: white;
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: bold;
 }
 
-#chat-btn:hover {
-    background: #0055aa;
+#closeChatBtn {
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
 }
 
-/* === Popup Chat Window === */
-#chat-popup {
-    position: fixed;
-    bottom: 90px;
-    right: 25px;
-    width: 350px;
-    background: #ffffff;
-    border-radius: 12px;
-    box-shadow: 0 0 20px rgba(0,0,0,0.2);
-    display: flex;
-    flex-direction: column;
-}
-
-.hidden {
-    display: none;
-}
-
-#chat-header {
-    background: #003366;
-    color: white;
-    padding: 10px;
-    font-size: 16px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-#close-btn {
-    background: transparent;
-    border: none;
-    color: white;
-    cursor: pointer;
-    font-size: 18px;
-}
-
-/* === Chat Messages === */
-#messages {
-    height: 300px;
-    overflow-y: auto;
-    padding: 10px;
-    background: #fafafa;
+/* Messages */
+#chatMessages {
+  padding: 14px;
+  height: 360px;
+  overflow-y: auto;
+  background: #fafafa;
 }
 
 .msg {
-    margin: 10px 0;
-    padding: 10px;
-    border-radius: 8px;
-    max-width: 80%;
-    white-space: pre-wrap;
+  max-width: 80%;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  white-space: pre-wrap;
 }
 
 .msg.user {
-    background: #e1ffc7;
-    margin-left: auto;
+  background: #e1ffc7;
+  margin-left: auto;
+  text-align: right;
 }
 
 .msg.bot {
-    background: #e8e8ff;
+  background: #e8ecff;
+  margin-right: auto;
 }
 
-/* === Input Bar === */
-#input-bar {
-    display: flex;
-    border-top: 1px solid #ddd;
+/* Input */
+#chatInputArea {
+  display: flex;
+  padding: 10px;
+  gap: 8px;
+  border-top: 1px solid #eee;
 }
-
-#user-input {
-    flex: 1;
-    padding: 10px;
-    border: none;
+#userInput {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
 }
-
-#send-btn {
-    background: #003366;
-    color: white;
-    border: none;
-    padding: 10px 14px;
-    cursor: pointer;
+#sendBtn {
+  background: #0073c8;
+  color: white;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
 }
