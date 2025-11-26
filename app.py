@@ -103,7 +103,14 @@ def send_email(name, email, phone, date, time):
 def index():
     return render_template("index.html")
 
-
+@app.route("/admin")
+def admin():
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("SELECT name, email, phone, date, time FROM bookings ORDER BY date, time")
+    rows = cur.fetchall()
+    conn.close()
+    return render_template("admin.html", bookings=rows)
 @app.route("/api/message", methods=["POST"])
 def chat():
     msg = request.json.get("message", "").strip()
