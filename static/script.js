@@ -1,3 +1,21 @@
+let chatStarted = false;
+
+function toggleChat() {
+    const popup = document.getElementById("chat-popup");
+
+    if (popup.classList.contains("hidden")) {
+        popup.classList.remove("hidden");
+
+        // Start the bot ONLY the first time
+        if (!chatStarted) {
+            showMessage("bot", "Hi! I'm here to help you book your assessment call. What's your name?");
+            chatStarted = true;
+        }
+    } else {
+        popup.classList.add("hidden");
+    }
+}
+
 async function sendMessage() {
     const inputBox = document.getElementById("user-input");
     const msg = inputBox.value.trim();

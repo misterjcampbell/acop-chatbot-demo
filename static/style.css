@@ -1,35 +1,94 @@
 body {
+    margin: 0;
     font-family: Arial, sans-serif;
-    background: #f4f4f4;
+    background: #f2f2f2;
 }
 
-#chat-container {
-    width: 450px;
-    background: white;
-    margin: 40px auto;
+/* === ACOP Branding === */
+#acop-header {
+    background: #003366;
+    color: white;
     padding: 20px;
-    border-radius: 10px;
-    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+    text-align: center;
 }
 
+#acop-logo {
+    height: 60px;
+    margin-bottom: 10px;
+}
+
+/* === Chat Button === */
+#chat-btn {
+    position: fixed;
+    bottom: 25px;
+    right: 25px;
+    background: #003366;
+    color: white;
+    border: none;
+    padding: 14px 20px;
+    border-radius: 50px;
+    cursor: pointer;
+    font-size: 16px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.3);
+}
+
+#chat-btn:hover {
+    background: #0055aa;
+}
+
+/* === Popup Chat Window === */
+#chat-popup {
+    position: fixed;
+    bottom: 90px;
+    right: 25px;
+    width: 350px;
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.2);
+    display: flex;
+    flex-direction: column;
+}
+
+.hidden {
+    display: none;
+}
+
+#chat-header {
+    background: #003366;
+    color: white;
+    padding: 10px;
+    font-size: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#close-btn {
+    background: transparent;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 18px;
+}
+
+/* === Chat Messages === */
 #messages {
-    height: 350px;
+    height: 300px;
     overflow-y: auto;
     padding: 10px;
-    border: 1px solid #ddd;
     background: #fafafa;
 }
 
 .msg {
-    margin: 8px 0;
+    margin: 10px 0;
     padding: 10px;
     border-radius: 8px;
-    max-width: 85%;
+    max-width: 80%;
+    white-space: pre-wrap;
 }
 
 .msg.user {
     background: #e1ffc7;
-    text-align: right;
     margin-left: auto;
 }
 
@@ -37,12 +96,22 @@ body {
     background: #e8e8ff;
 }
 
+/* === Input Bar === */
 #input-bar {
     display: flex;
-    margin-top: 10px;
+    border-top: 1px solid #ddd;
 }
 
 #user-input {
     flex: 1;
     padding: 10px;
+    border: none;
+}
+
+#send-btn {
+    background: #003366;
+    color: white;
+    border: none;
+    padding: 10px 14px;
+    cursor: pointer;
 }
