@@ -333,6 +333,36 @@ def notify_on_booking(booking_row):
             f"_(sent by {TEAMS_SENDER_NAME})_"
         )
         post_to_teams(settings["teams_webhook"], "New Assessment Booking", text)
+import requests
+
+def notify_teams(name, email, phone, date, time):
+    url = os.getenv("TEAMS_WEBHOOK")
+    if not url:
+        return
+
+    pretty_date = datetime.strptime(date, "%Y-%m-%d").strftime("%d %B %Y")
+
+    card = {
+        "@type": "MessageCard",
+        "@context": "http://schema.org/extensions",
+        "summary": "New Booking",
+        "themeColor": "0076D7",
+        "title": "📞 New ACOP Assessment Booking",
+        "sections": [{
+            "facts": [
+                {"name": "Name", "value": name},
+                {"name": "Email", "value": email},
+                {"name": "Phone", "value": phone},
+                {"name": "Date", "value": pretty_date},
+                {"name": "Time", "value": time},
+            ]
+        }]
+    }
+
+    try:
+        requests.post(url, json=card, timeout=5)
+    except Exception as e:
+        app.logger.error(f"Teams notification failed: {e}")
 
 
 # --------------------
