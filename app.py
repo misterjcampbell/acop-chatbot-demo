@@ -364,6 +364,7 @@ def notify_teams(name, email, phone, date, time):
     except Exception as e:
         app.logger.error(f"Teams notification failed: {e}")
 
+notify_teams(S["name"], S["email"], S["phone"], S["date"], t)
 
 # --------------------
 # Scheduler jobs
