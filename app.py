@@ -569,7 +569,7 @@ def chat():
             except:
                 reply = "Use DD/MM/YYYY and choose a future weekday."
 
-        elif S["stage"] == "time":
+               elif S["stage"] == "time":
             t_input = msg.strip().upper().replace(" ", "").replace(".", ":")
             if ":" not in t_input:
                 t_input = t_input + ":00"
@@ -582,15 +582,14 @@ def chat():
             elif is_booked(S["date"], t):
                 reply = "That time is now taken. Please choose another."
             else:
-                # Save booking
-                booking_id = save_booking(S["name"], S["email"], S["phone"], S["date"], t)
-                # Get the saved booking row
-                conn = sqlite3.connect(DB_FILE)
-                cur = conn.cursor()
-                cur.execute("SELECT id, name, email, phone, date, time, created_at FROM bookings WHERE id=?", (booking_id,))
-                booking_row = cur.fetchone()
-                conn.close()
+                # ⭐ Correct indentation here
+                save_booking(S["name"], S["email"], S["phone"], S["date"], t)
+                send_email(S["name"], S["email"], S["phone"], S["date"], t)
+                notify_admin(S["name"], S["email"], S["phone"], S["date"], t)
 
+                nice_date = datetime.strptime(S["date"], "%Y-%m-%d").strftime("%d %B %Y")
+                reply = f"Confirmed! Your call is on {nice_date} at {t}\n\nType 'cancel' anytime to change it."
+                S.clear()
                 # Send confirmation email to student (non-blocking is handled inside function)
                 send_email(S["name"], S["email"], S["phone"], S["date"], t)
 
