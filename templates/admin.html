@@ -11,16 +11,16 @@
         .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
         .logout { background:#c0392b; color:white; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; }
         .delete-btn { background:#e74c3c; color:white; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; }
+        .green { background:#27ae60; color:white; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; text-decoration:none;}
     </style>
 </head>
 <body>
     <div class="topbar">
         <h1>All Bookings</h1>
-        <div><a href="/admin/export">
-    <button class="logout" style="background:#27ae60;">Download CSV</button>
-</a>
-            <span>Signed in as <strong>{{ admin_user }}</strong></span>
-            <a href="/admin/logout"><button class="logout">Logout</button></a>
+        <div>
+            <a href="/admin/settings" class="green">Notification Settings</a>
+            <a href="/admin/export"><button class="green" style="margin-left:8px;">Download CSV</button></a>
+            <a href="/admin/logout"><button class="logout" style="margin-left:8px;">Logout</button></a>
         </div>
     </div>
 
@@ -32,6 +32,7 @@
             <th>Phone</th>
             <th>Date</th>
             <th>Time</th>
+            <th>Created</th>
             <th>Action</th>
         </tr>
         {% for b in bookings %}
@@ -42,6 +43,7 @@
             <td>{{ b[3] }}</td>
             <td>{{ b[4] }}</td>
             <td>{{ b[5] }}</td>
+            <td>{{ b[6] }}</td>
             <td>
                 <form method="post" action="/admin/delete/{{ b[0] }}" style="display:inline;" onsubmit="return confirm('Delete booking?');">
                     <button type="submit" class="delete-btn">Delete</button>
