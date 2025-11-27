@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>Admin Settings - ACOP</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); max-width: 800px;}
+        label { display:block; margin:10px 0 4px; }
+        input[type="text"] { width:100%; padding:8px; border:1px solid #ccc; border-radius:6px; }
+        .toggles { display:flex; gap:12px; flex-wrap:wrap; }
+        .toggles label { display:flex; align-items:center; gap:8px; }
+        button { background:#0073c8; color:white; padding:10px 14px; border:none; border-radius:6px; cursor:pointer; }
+        a { color:#0073c8; text-decoration:none; }
+    </style>
+</head>
+<body>
+    <h1>Notifications Settings</h1>
+    <div class="card">
+        <form method="post" action="/admin/settings">
+            <div class="toggles">
+                <label><input type="checkbox" name="email_per_booking" value="1" {% if settings.email_per_booking %}checked{% endif %}> Email admin for each booking</label>
+                <label><input type="checkbox" name="attach_csv" value="1" {% if settings.attach_csv %}checked{% endif %}> Attach CSV per booking</label>
+                <label><input type="checkbox" name="daily_summary" value="1" {% if settings.daily_summary %}checked{% endif %}> Daily summary (XLSX)</label>
+                <label><input type="checkbox" name="weekly_summary" value="1" {% if settings.weekly_summary %}checked{% endif %}> Weekly summary (XLSX)</label>
+                <label><input type="checkbox" name="teams_enabled" value="1" {% if settings.teams_enabled %}checked{% endif %}> Send Teams notifications</label>
+            </div>
+
+            <label>Teams Webhook URL</label>
+            <input type="text" name="teams_webhook" value="{{ settings.teams_webhook|e }}" placeholder="https://outlook.office.com/webhook/..." />
+
+            <div style="margin-top:16px;">
+                <button type="submit">Save settings</button>
+                <a href="/admin" style="margin-left:12px;">Back to admin</a>
+            </div>
+        </form>
+    </div>
+</body>
+</html>
