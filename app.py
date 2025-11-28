@@ -403,6 +403,21 @@ def admin_export():
     csv_bytes = make_csv_bytes(rows)
     return Response(csv_bytes, mimetype="text/csv", headers={"Content-Disposition":"attachment; filename=acop_bookings.csv"})
 
+@app.route("/admin/test-teams")
+def admin_test_teams():
+    webhook = os.getenv("TEAMS_WEBHOOK")
+    if not webhook:
+        return "TEAMS_WEBHOOK is not set", 500
+
+    try:
+        r = requests.post(webhook, json={"text": "ACOP Chatbot Test: Teams webhook is working."})
+        if r.status_code in (200, 201, 204):
+            return "Test message sent successfully!"
+        else:
+            return f"Teams returned an error: {r.status_code} – {r.text}"
+    except Exception as e:
+        return f"Request failed: {str(e)}"
+
 # --------- Chat endpoint ----------
 @app.route("/api/message", methods=["POST"])
 def chat():
