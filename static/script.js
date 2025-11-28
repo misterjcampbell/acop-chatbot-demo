@@ -1,57 +1,52 @@
-// Toggle chat popup
-const chatButton = document.getElementById("chatButton");
-const chatPopup = document.getElementById("chatPopup");
+document.addEventListener('DOMContentLoaded', () => {
+    const toggle = document.getElementById('chat-toggle');
+    const popup = document.getElementById('chat-popup');
+    const close = document.getElementById('close-chat');
+    const box = document.getElementById('chat-box');
+    const input = document.getElementById('txt');
+    const send = document.getElementById('send');
 
-chatButton.onclick = () => {
-    chatPopup.style.display =
-        chatPopup.style.display === "none" || chatPopup.style.display === "" 
-        ? "flex" 
-        : "none";
-};
+    toggle.onclick = () => {
+        popup.style.display = 'flex';
+        input.focus();
+    };
+    close.onclick = () => popup.style.display = 'none';
 
-// DOM Elements
-const chatMessages = document.getElementById("chatMessages");
-const userInput = document.getElementById("userInput");
-const sendBtn = document.getElementById("sendBtn");
+    function addMessage(text, sender) {
+        const div = document.createElement('div');
+        div.className = `msg ${sender}`;
+        div.innerHTML = text.replace(/\n/g, '<br>');
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    }
 
-// Send user message
-sendBtn.onclick = () => {
-    const text = userInput.value.trim();
-    if (!text) return;
+    async function sendMessage() {
+        let text = input.value.trim();
+        if (!text) return;
+        addMessage(text, 'user');
+        input.value = '';
 
-    addMessage(text, "user");
-    userInput.value = "";
-    sendToBot(text);
-};
+        const typing = document.createElement('div');
+        typing.className = 'msg bot';
+        typing.textContent = 'Typing...';
+        typing.id = 'typing';
+        box.appendChild(typing);
 
-// Press Enter to send
-userInput.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") sendBtn.click();
+        try {
+            const res = await fetch('/api/message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: text })
+            });
+            typing.remove();
+            const data = await res.json();
+            addMessage(data.reply, 'bot');
+        } catch (e) {
+            typing.remove();
+            addMessage('Connection error. Please try again.', 'bot');
+        }
+    }
+
+    send.onclick = sendMessage;
+    input.onkeypress = e => { if (e.key === 'Enter') sendMessage(); };
 });
-
-// Display messages
-function addMessage(text, sender) {
-    const div = document.createElement("div");
-    div.classList.add("message", sender);
-    div.innerText = text;
-
-    chatMessages.appendChild(div);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-// Send message to backend AI
-function sendToBot(message) {
-    fetch("/api/message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message })
-    })
-    .then(res => res.json())
-    .then(data => {
-        addMessage(data.response, "bot");
-    })
-    .catch(err => {
-        console.error(err);
-        addMessage("Sorry — server error. Please try again later.", "bot");
-    });
-}
