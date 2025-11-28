@@ -1,108 +1,77 @@
-let currentContext = {};
+// static/script.js
+(function () {
+  const openBtn = document.getElementById("openChatBtn");
+  const closeBtn = document.getElementById("closeChatBtn");
+  const popup = document.getElementById("chatPopup");
+  const messagesEl = document.getElementById("chatMessages");
+  const userInput = document.getElementById("userInput");
+  const sendBtn = document.getElementById("sendBtn");
 
-function toggleChat() {
-    const widget = document.getElementById('chat-widget');
-    const launcher = document.getElementById('chat-launcher');
-    if (widget.style.display === 'none' || widget.style.display === '') {
-        widget.style.display = 'block';
-        launcher.style.display = 'none';
-        if (document.getElementById('chat-messages').children.length === 0) {
-            addMessage("Hi! I'm here to help you book your assessment call. What's your name?", 'bot');
-        }
-    } else {
-        widget.style.display = 'none';
-        launcher.style.display = 'block';
+  let chatStarted = false;
+
+  function appendMessage(sender, text) {
+    const el = document.createElement("div");
+    el.className = sender === "user" ? "msg user" : "msg bot";
+    el.innerText = text;
+    messagesEl.appendChild(el);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function openChat() {
+    popup.style.display = "flex";
+    popup.setAttribute("aria-hidden", "false");
+    userInput.focus();
+    if (!chatStarted) {
+      // initial greeting
+      setTimeout(() => {
+        appendMessage("bot", "Hi! I'm here to help you book your assessment call. What's your name?");
+        chatStarted = true;
+      }, 200);
     }
-}
+  }
 
-function addMessage(text, sender) {
-    const chat = document.getElementById('chat-messages');
-    const div = document.createElement('div');
-    div.className = sender === 'user' ? 'user-message' : 'bot-message';
-    div.textContent = text;
-    chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
-}
+  function closeChat() {
+    popup.style.display = "none";
+    popup.setAttribute("aria-hidden", "true");
+  }
 
-function sendMessage() {
-    const input = document.getElementById('user-input');
-    const message = input.value.trim();
-    if (!message) return;
-    addMessage(message, 'user');
-    input.value = '';
+  openBtn.addEventListener("click", openChat);
+  closeBtn.addEventListener("click", closeChat);
 
-    fetch('/api/message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: message, context: currentContext })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.messages) {
-            data.messages.forEach(m => addMessage(m.text, 'bot'));
-        }
-        if (data.context) {
-            currentContext = data.context;
-            if (currentContext.asked_phone && !document.getElementById('date-picker')) {
-                setTimeout(showCalendar, 600);
-            }
-        }
-    });
-}
+  // allow Enter key to send
+  userInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
 
-function showCalendar() {
-    const chat = document.getElementById('chat-messages');
-    const div = document.createElement('div');
-    div.innerHTML = `
-        <p><strong>Please select your preferred date and time:</strong></p>
-        <input type="date" id="date-picker" required>
-        <select id="time-picker">
-            <option value="10:00">10:00 AM</option>
-            <option value="11:00">11:00 AM</option>
-            <option value="14:00">2:00 PM</option>
-            <option value="15:00">3:00 PM</option>
-            <option value="16:00">4:00 PM</option>
-        </select>
-        <button onclick="bookSlot()" style="margin-top:8px;">Book This Slot</button>
-    `;
-    chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
-}
+  sendBtn.addEventListener("click", sendMessage);
 
-function bookSlot() {
-    const date = document.getElementById('date-picker').value;
-    const time = document.getElementById('time-picker').value;
-    if (!date) return addMessage("Please choose a date first.", 'bot');
+  async function sendMessage() {
+    const text = userInput.value.trim();
+    if (!text) return;
+    appendMessage("user", text);
+    userInput.value = "";
 
-    fetch('/check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date, time })
-    })
-    .then(r => r.json())
-    .then(res => {
-        if (!res.available) {
-            addMessage("That slot was just taken. Please pick another time.", 'bot');
-            return;
-        }
+    try {
+      const res = await fetch("/api/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text })
+      });
+      if (!res.ok) {
+        appendMessage("bot", "Sorry — server error. Please try again.");
+        return;
+      }
+      const data = await res.json();
+      appendMessage("bot", data.reply || "No reply.");
+    } catch (err) {
+      appendMessage("bot", "Network error. Please try again.");
+      console.error(err);
+    }
+  }
 
-        fetch('/book', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: currentContext.name,
-                phone: currentContext.phone || currentContext.phone,
-                date, time
-            })
-        })
-        .then(r => r.json())
-        .then(result => {
-            addMessage(result.message || "Your booking is confirmed! Thank you.", 'bot');
-        });
-    });
-}
-
-// Send on Enter
-document.getElementById('user-input')?.addEventListener('keypress', e => {
-    if (e.key === 'Enter') sendMessage();
-});
+  // Expose for debugging (optional)
+  window.acopChat = { openChat, closeChat, appendMessage };
+})();
