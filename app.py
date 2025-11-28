@@ -131,6 +131,16 @@ def book():
 
     return jsonify({'success': True, 'message': 'Booking confirmed and emails sent successfully.'})
 
+@app.route("/api/message", methods=["POST"])
+def api_message():
+    try:
+        data = request.get_json()
+        user_msg = data.get("message", "").strip()
+        reply = chat(user_msg)
+        return jsonify({"reply": reply})
+    except Exception as e:
+        app.logger.error(f"Error in /api/message: {e}")
+        return jsonify({"reply": "Sorry — server error. Please try again."})
 
 # -------------------------
 # RUN APP
