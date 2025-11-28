@@ -1,4 +1,4 @@
-# app.py - Full corrected file with Teams support, test endpoint, and daily/weekly summary triggers
+# app.py - Full corrected file with Teams & test-email support
 from flask import (
     Flask, render_template, request, jsonify, make_response, session,
     redirect, url_for, Response, flash
@@ -38,7 +38,7 @@ SESSIONS = {}
 ADMIN_USER = os.getenv("ADMIN_USER", "Admin")
 ADMIN_PASS = os.getenv("ADMIN_PASS", "Acop2025!")
 
-# Mail (override in env)
+# Mail (Mailtrap sandbox)
 SMTP_HOST = os.getenv("SMTP_HOST", "sandbox.smtp.mailtrap.io")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "2525"))
 SMTP_USER = os.getenv("SMTP_USER", "17d873b3a11a38")
@@ -46,7 +46,7 @@ SMTP_PASS = os.getenv("SMTP_PASS", "453b9c740a0729")
 FROM_EMAIL = os.getenv("FROM_EMAIL", "enquiries@acop.edu.au")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "johnc@acop.edu.au")
 
-# Teams sender name (for messages)
+# Teams sender name (display in messages)
 TEAMS_SENDER_NAME = os.getenv("TEAMS_SENDER_NAME", "Engagement Assessment Bot")
 
 # Timezone for scheduler
@@ -284,8 +284,15 @@ def notify_on_booking(booking_row):
         if settings["email_per_booking"]:
             subj = f"New Booking: {booking_row[1]} — {pretty_date} {booking_row[5]}"
             plain = (
-                f"A new booking has been made:\n\n"
-                f"Name: {booking_row[1]}\nEmail: {booking_row[2]}\nPhone: {booking_row[3]}\nDate: {pretty_date}\nTime: {booking_row[5]}\n"
+                f"A new booking has been made:
+
+"
+                f"Name: {booking_row[1]}
+Email: {booking_row[2]}
+Phone: {booking_row[3]}
+Date: {pretty_date}
+Time: {booking_row[5]}
+"
             )
             html = (
                 f"<h3>New Booking</h3>"
@@ -303,12 +310,20 @@ def notify_on_booking(booking_row):
         # Teams
         if settings["teams_enabled"] and settings["teams_webhook"]:
             text = (
-                f"📅 New Assessment Booking\n\n"
-                f"Name: {booking_row[1]}\n"
-                f"Email: {booking_row[2]}\n"
-                f"Phone: {booking_row[3]}\n"
-                f"Date: {pretty_date}\n"
-                f"Time: {booking_row[5]}\n\n"
+                f"📅 New Assessment Booking
+
+"
+                f"Name: {booking_row[1]}
+"
+                f"Email: {booking_row[2]}
+"
+                f"Phone: {booking_row[3]}
+"
+                f"Date: {pretty_date}
+"
+                f"Time: {booking_row[5]}
+
+"
                 f"(sent by {TEAMS_SENDER_NAME})"
             )
             post_to_teams(settings["teams_webhook"], text)
@@ -333,7 +348,11 @@ def daily_summary_job():
         send_email_with_attachments(ADMIN_EMAIL, subj, plain, attachments=[(f"bookings_{start}.xlsx", xlsx, "vnd.openxmlformats-officedocument.spreadsheetml.sheet")])
         settings = get_settings()
         if settings["teams_enabled"] and settings["teams_webhook"]:
-            post_to_teams(settings["teams_webhook"], f"📊 Daily Booking Summary\n\nBookings today: {len(rows)}\n\nAttached: bookings_{start}.xlsx")
+            post_to_teams(settings["teams_webhook"], f"📊 Daily Booking Summary
+
+Bookings today: {len(rows)}
+
+Attached: bookings_{start}.xlsx")
     except Exception as e:
         app.logger.exception("daily_summary_job failed: %s", e)
 
@@ -352,7 +371,11 @@ def weekly_summary_job():
         send_email_with_attachments(ADMIN_EMAIL, subj, plain, attachments=[(f"bookings_{start}_to_{end}.xlsx", xlsx, "vnd.openxmlformats-officedocument.spreadsheetml.sheet")])
         settings = get_settings()
         if settings["teams_enabled"] and settings["teams_webhook"]:
-            post_to_teams(settings["teams_webhook"], f"📈 Weekly Booking Summary\n\nBookings: {len(rows)}\n\nAttached: bookings_{start}_to_{end}.xlsx")
+            post_to_teams(settings["teams_webhook"], f"📈 Weekly Booking Summary
+
+Bookings: {len(rows)}
+
+Attached: bookings_{start}_to_{end}.xlsx")
     except Exception as e:
         app.logger.exception("weekly_summary_job failed: %s", e)
 
@@ -413,7 +436,7 @@ def admin_settings():
         daily_summary = bool(request.form.get("daily_summary"))
         weekly_summary = bool(request.form.get("weekly_summary"))
         teams_enabled = bool(request.form.get("teams_enabled"))
-        teams_webhook = request.form.get("teams_webhook","").strip()
+        teams_webhook = request.form.get("teams_webhook","`).strip()
         update_settings(email_per_booking=email_per_booking, attach_csv=attach_csv, daily_summary=daily_summary, weekly_summary=weekly_summary, teams_enabled=teams_enabled, teams_webhook=teams_webhook)
         flash("Settings saved.", "success")
         return redirect(url_for("admin_settings"))
@@ -450,6 +473,19 @@ def admin_test_teams():
     except Exception as e:
         return f"Request failed: {str(e)}", 500
 
+# Admin test endpoint for Email (protected)
+@app.route("/admin/test-email", methods=["GET"])
+@require_admin
+def admin_test_email():
+    try:
+        subj = "ACOP Test Email"
+        plain = "This is a test email from the ACOP booking system. If you receive this, SMTP works."
+        send_email_with_attachments(ADMIN_EMAIL, subj, plain)
+        return "Test email sent (check Mailtrap)."
+    except Exception as e:
+        app.logger.exception("Failed to send test email: %s", e)
+        return "Failed to send test email (check logs).", 500
+
 # Trigger endpoints (useful for Render Cron Jobs) - protected
 @app.route("/admin/trigger/daily", methods=["POST","GET"])
 @require_admin
@@ -475,7 +511,7 @@ def trigger_weekly():
 @app.route("/api/message", methods=["POST"])
 def chat():
     data = request.get_json(silent=True) or {}
-    msg = data.get("message","").strip()
+    msg = data.get("message","`).strip()
     sid = request.cookies.get("sid") or str(uuid.uuid4())
     if sid not in SESSIONS:
         SESSIONS[sid] = {"stage":"name"}
@@ -533,7 +569,8 @@ def chat():
                     S["date"] = None
                 else:
                     S["stage"] = "time"
-                    reply = f"Available on {msg}:\n" + ", ".join(free)
+                    reply = f"Available on {msg}:
+" + ", ".join(free)
             except:
                 reply = "Use DD/MM/YYYY and choose a future weekday."
 
@@ -568,7 +605,9 @@ def chat():
                 notify_on_booking(booking_row)
 
                 nice_date = datetime.strptime(S["date"], "%Y-%m-%d").strftime("%d %B %Y")
-                reply = f"Confirmed! Your call is on {nice_date} at {t}\n\nType 'cancel' anytime to change it."
+                reply = f"Confirmed! Your call is on {nice_date} at {t}
+
+Type 'cancel' anytime to change it."
                 S.clear()
 
     except Exception as e:
