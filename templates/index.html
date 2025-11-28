@@ -1,26 +1,31 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>ACOP Chatbot</title>
-<script src="{{ url_for('static', filename='script.js') }}"></script>
-<script>
-async function sendMessage() {
-    const msg = document.getElementById("msg").value;
-    const res = await fetch("/api/message", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({message: msg})
-    });
-    const data = await res.json();
-    document.getElementById("chat").innerHTML += "<div>User: "+msg+"</div>";
-    document.getElementById("chat").innerHTML += "<div>Bot: "+data.reply+"</div>";
-    document.getElementById("msg").value = "";
-}
-</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACOP Assessment Booking</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<div id="chat" style="border:1px solid #ccc; padding:10px; height:300px; overflow:auto;"></div>
-<input id="msg" type="text"><button onclick="sendMessage()">Send</button>
+
+    <!-- Chat Toggle Button -->
+    <button id="chat-toggle">Chat</button>
+
+    <!-- Chat Popup -->
+    <div id="chat-popup">
+        <div id="chat-header">
+            <span>ACOP Booking Assistant</span>
+            <button id="close-chat">×</button>
+        </div>
+        <div id="chat-box">
+            <div class="msg bot">Hi! I'm here to help you book your assessment call.<br>What's your name?</div>
+        </div>
+        <div id="chat-input">
+            <input type="text" id="txt" placeholder="Type your message..." autocomplete="off">
+            <button id="send">Send</button>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
 </body>
 </html>
