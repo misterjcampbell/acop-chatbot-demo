@@ -1,15 +1,49 @@
 <!DOCTYPE html>
-<html><head><title>ACOP Admin</title><style>
-  body{font-family:Segoe UI;background:#f0f4f8;padding:20px}
-  table{border-collapse:collapse;width:100%;background:white}
-  th,td{border:1px solid #ddd;padding:10px;text-align:left}
-  th{background:#004cbf;color:white}
-  button{background:#0098ea;color:white;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
-</style></head><body>
-<h1>ACOP Bookings Admin</h1>
-<a href="/admin/settings">Settings</a> | <a href="/admin/export">Export CSV</a> | <a href="/admin/logout">Logout</a>
-<hr>
-<table><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Date</th><th>Time</th><th>Action</th></tr>
-<!-- Your rows will go here -->
-</table>
-</body></html>
+<html>
+<head>
+    <title>ACOP Bookings Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {font-family: Segoe UI, sans-serif; margin:40px; background:#f8f9fa}
+        h1 {color:#004cbf}
+        a {margin-right:15px; color:#0098ea}
+        table {width:100%; border-collapse:collapse; margin-top:20px; background:white}
+        th {background:#004cbf; color:white; padding:12px}
+        td {padding:10px; border:1px solid #ddd; text-align:left}
+        tr:nth-child(even) {background:#f8f9ff}
+        button {background:#d9534f; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer}
+        .empty {color:#888; font-style:italic; padding:20px; text-align:center}
+    </style>
+</head>
+<body>
+    <h1>ACOP Bookings Admin</h1>
+    <p><a href="/admin/settings">Settings</a> | <a href="/admin/export">Export CSV</a> | <a href="/admin/logout">Logout</a></p>
+    <hr>
+
+    {% if bookings|length == 0 %}
+        <p class="empty">No bookings yet.</p>
+    {% else %}
+    <table>
+        <tr>
+            <th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Date</th><th>Time</th><th>Action</th>
+        </tr>
+        {% for b in bookings %}
+        <tr>
+            <td>{{ b[0] }}</td>
+            <td>{{ b[1] }}</td>
+            <td>{{ b[2] }}</td>
+            <td>{{ b[3] }}</td>
+            <td>{{ b[4] }}</td>
+            <td>{{ b[5] }}</td>
+            <td>
+                <form method="POST" action="/admin/delete/{{ b[0] }}" style="display:inline"
+                      onsubmit="return confirm('Delete this booking?');">
+                    <button type="submit">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+</body>
+</html>
