@@ -1,36 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ACOP Assessment Booking Assistant</title>
-  <link rel="stylesheet" href="/static/style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACOP Assessment Booking</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
-  <header class="acop-header">
-    <img src="https://acop.edu.au/wp-content/uploads/2019/09/acop-logo.png" alt="ACOP" class="acop-logo">
-    <div class="acop-title">Australian College of Professionals</div>
-  </header>
-
-  <!-- Floating chat button -->
-  <button id="openChatBtn" aria-label="Open chat">Chat with us</button>
-
-  <!-- Popup chat window -->
-  <div id="chatPopup" aria-hidden="true">
-    <div id="chatHeader">
-      <div>ACOP Chatbot</div>
-      <button id="closeChatBtn" aria-label="Close chat">✖</button>
+    <!-- Floating chat button (this was broken before) -->
+    <div id="chat-launcher" onclick="toggleChat()">
+        <span>Chat with us</span>
     </div>
 
-    <div id="chatMessages" role="log" aria-live="polite"></div>
-
-    <div id="chatInputArea">
-      <input id="userInput" type="text" placeholder="Type your message..." autocomplete="off">
-      <button id="sendBtn">Send</button>
+    <!-- Chat widget (hidden at first) -->
+    <div id="chat-widget" style="display:none;">
+        <div id="chat-header">
+            <span>ACOP Chatbot</span>
+            <button onclick="toggleChat()" style="float:right;background:none;border:none;font-size:20px;cursor:pointer;">×</button>
+        </div>
+        <div id="chat-messages"></div>
+        <div id="chat-input-area">
+            <input type="text" id="user-input" placeholder="Type your message...">
+            <button onclick="sendMessage()">Send</button>
+        </div>
     </div>
-  </div>
 
-  <script src="/static/script.js"></script>
+    <script src="/static/script.js"></script>
+    <script>
+        // Auto-open chat on load (optional – remove if you want click-only)
+        window.onload = () => toggleChat();
+    </script>
 </body>
 </html>
