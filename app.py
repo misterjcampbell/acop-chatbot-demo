@@ -1,4 +1,4 @@
-# app.py (cleaned & corrected)
+# app.py - Full corrected file with Teams support, test endpoint, and daily/weekly summary triggers
 from flask import (
     Flask, render_template, request, jsonify, make_response, session,
     redirect, url_for, Response, flash
@@ -22,19 +22,23 @@ from openpyxl import Workbook
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from functools import wraps
+
+# ---- Logging ----
 logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET", "acop-2025-final")
 
+# ---- Config / Constants ----
 DB_FILE = "bookings.db"
 TIME_SLOTS = ["09:00", "11:00", "15:30"]
 SESSIONS = {}
 
-# Admin credentials (override via Render env)
+# Admin credentials (override in Render env for production)
 ADMIN_USER = os.getenv("ADMIN_USER", "Admin")
 ADMIN_PASS = os.getenv("ADMIN_PASS", "Acop2025!")
 
-# Mail settings (override via env)
+# Mail (override in env)
 SMTP_HOST = os.getenv("SMTP_HOST", "sandbox.smtp.mailtrap.io")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "2525"))
 SMTP_USER = os.getenv("SMTP_USER", "17d873b3a11a38")
@@ -42,13 +46,13 @@ SMTP_PASS = os.getenv("SMTP_PASS", "453b9c740a0729")
 FROM_EMAIL = os.getenv("FROM_EMAIL", "enquiries@acop.edu.au")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "johnc@acop.edu.au")
 
-# Teams sender name
-TEAMS_SENDER_NAME = "Engagement Assessment Bot"
+# Teams sender name (for messages)
+TEAMS_SENDER_NAME = os.getenv("TEAMS_SENDER_NAME", "Engagement Assessment Bot")
 
-# Timezone
-LOCAL_TZ = pytz.timezone("Australia/Sydney")
+# Timezone for scheduler
+LOCAL_TZ = pytz.timezone(os.getenv("LOCAL_TZ", "Australia/Sydney"))
 
-# --------- Database init & helpers ----------
+# ---- Database init & helpers ----
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
@@ -76,7 +80,9 @@ def init_db():
     """)
     cur.execute("SELECT COUNT(*) FROM admin_settings")
     if cur.fetchone()[0] == 0:
-        cur.execute("INSERT INTO admin_settings (id,email_per_booking,attach_csv,daily_summary,weekly_summary,teams_enabled,teams_webhook) VALUES (1,1,1,1,1,1,'')")
+        cur.execute(
+            "INSERT INTO admin_settings (id,email_per_booking,attach_csv,daily_summary,weekly_summary,teams_enabled,teams_webhook) VALUES (1,1,1,1,1,1,'')"
+        )
     conn.commit()
     conn.close()
 
@@ -168,7 +174,7 @@ def is_booked(date_str, time_str):
 def is_past(date_str):
     return datetime.strptime(date_str, "%Y-%m-%d").date() < datetime.now(LOCAL_TZ).date()
 
-# --------- File builders & email helpers ----------
+# ---- CSV / XLSX builders and mail helpers ----
 def make_csv_bytes(rows):
     buf = io.StringIO()
     writer = csv.writer(buf, quoting=csv.QUOTE_MINIMAL)
@@ -198,6 +204,10 @@ def make_xlsx_bytes(rows, sheet_name="Bookings"):
     return bio.read()
 
 def send_email_with_attachments(to_email, subject, plain_text, html=None, attachments=None):
+    """
+    attachments: list of tuples (filename, bytes, mime_subtype)
+    subtype examples: "csv" or "vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    """
     try:
         msg = EmailMessage()
         msg["From"] = FROM_EMAIL
@@ -215,32 +225,26 @@ def send_email_with_attachments(to_email, subject, plain_text, html=None, attach
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
             s.login(SMTP_USER, SMTP_PASS)
             s.send_message(msg)
-        app.logger.info("Email sent to %s", to_email)
+        app.logger.info("Email sent to %s (subject: %s)", to_email, subject)
     except Exception as e:
         app.logger.exception("Failed to send email to %s: %s", to_email, e)
 
-def post_to_teams(webhook_url, title, text):
+def post_to_teams(webhook_url, text):
     if not webhook_url:
+        app.logger.warning("post_to_teams: no webhook_url provided")
         return False
-    payload = {
-        "@type":"MessageCard",
-        "@context":"http://schema.org/extensions",
-        "summary": title,
-        "themeColor":"0078D4",
-        "title": title,
-        "text": text
-    }
+    payload = {"text": text}
     try:
-        r = requests.post(webhook_url, json=payload, timeout=8)
-        r.raise_for_status()
-        app.logger.info("Posted to Teams")
+        resp = requests.post(webhook_url, json=payload, timeout=8)
+        resp.raise_for_status()
+        app.logger.info("Posted to Teams webhook")
         return True
     except Exception as e:
         app.logger.exception("Failed to post to Teams: %s", e)
         return False
 
-# send student confirmation (with .ics)
-def send_email(name, email, phone, date_str, time_str):
+# Send student confirmation with .ics attachment
+def send_email_confirmation(name, email, phone, date_str, time_str):
     try:
         dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
         cal = Calendar()
@@ -257,8 +261,8 @@ def send_email(name, email, phone, date_str, time_str):
         msg["From"] = FROM_EMAIL
         msg["To"] = email
         msg["Subject"] = "Your ACOP Assessment Call is Confirmed"
-        msg.set_content("Confirmed!")
-        html = f"<h3>Hi {name}!</h3><p>Your call: {datetime.strptime(date_str,'%Y-%m-%d').strftime('%d %B %Y')} at {time_str}.</p>"
+        msg.set_content("Your assessment call is confirmed.")
+        html = f"<h3>Hi {name}!</h3><p>Your call is on {datetime.strptime(date_str,'%Y-%m-%d').strftime('%d %B %Y')} at {time_str}.</p><p>— ACOP Team</p>"
         msg.add_alternative(html, subtype="html")
         msg.add_attachment(cal.to_ical(), maintype="application", subtype="ics", filename="ACOP-Call.ics")
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
@@ -268,24 +272,50 @@ def send_email(name, email, phone, date_str, time_str):
     except Exception as e:
         app.logger.exception("Failed to send confirmation email to %s: %s", email, e)
 
-# notify admin (email + teams) based on settings
+# Admin notification (email with CSV attachment + Teams)
 def notify_on_booking(booking_row):
-    # booking_row: (id,name,email,phone,date,time,created_at)
-    settings = get_settings()
-    pretty_date = datetime.strptime(booking_row[4], "%Y-%m-%d").strftime("%d %B %Y")
-    if settings["email_per_booking"]:
-        subj = f"New Booking: {booking_row[1]} — {pretty_date} {booking_row[5]}"
-        plain = f"New booking:\nName: {booking_row[1]}\nEmail: {booking_row[2]}\nPhone: {booking_row[3]}\nDate: {pretty_date}\nTime: {booking_row[5]}"
-        html = f"<h3>New Booking</h3><p><strong>Name:</strong> {booking_row[1]}</p><p><strong>Email:</strong> {booking_row[2]}</p><p><strong>Phone:</strong> {booking_row[3]}</p><p><strong>Date:</strong> {pretty_date}</p><p><strong>Time:</strong> {booking_row[5]}</p>"
-        attachments = []
-        if settings["attach_csv"]:
-            attachments.append(("booking.csv", make_single_booking_csv_bytes(booking_row), "csv"))
-        send_email_with_attachments(ADMIN_EMAIL, subj, plain, html=html, attachments=attachments)
-    if settings["teams_enabled"] and settings["teams_webhook"]:
-        text = f"**📅 New Assessment Booking**\n\n**Name:** {booking_row[1]}\n**Email:** {booking_row[2]}\n**Phone:** {booking_row[3]}\n**Date:** {pretty_date}\n**Time:** {booking_row[5]}\n\n_(sent by {TEAMS_SENDER_NAME})_"
-        post_to_teams(settings["teams_webhook"], "New Assessment Booking", text)
+    """
+    booking_row: (id, name, email, phone, date, time, created_at)
+    """
+    try:
+        settings = get_settings()
+        pretty_date = datetime.strptime(booking_row[4], "%Y-%m-%d").strftime("%d %B %Y")
 
-# --------- Scheduler jobs ----------
+        if settings["email_per_booking"]:
+            subj = f"New Booking: {booking_row[1]} — {pretty_date} {booking_row[5]}"
+            plain = (
+                f"A new booking has been made:\n\n"
+                f"Name: {booking_row[1]}\nEmail: {booking_row[2]}\nPhone: {booking_row[3]}\nDate: {pretty_date}\nTime: {booking_row[5]}\n"
+            )
+            html = (
+                f"<h3>New Booking</h3>"
+                f"<p><strong>Name:</strong> {booking_row[1]}</p>"
+                f"<p><strong>Email:</strong> {booking_row[2]}</p>"
+                f"<p><strong>Phone:</strong> {booking_row[3]}</p>"
+                f"<p><strong>Date:</strong> {pretty_date}</p>"
+                f"<p><strong>Time:</strong> {booking_row[5]}</p>"
+            )
+            attachments = []
+            if settings["attach_csv"]:
+                attachments.append(("booking.csv", make_single_booking_csv_bytes(booking_row), "csv"))
+            send_email_with_attachments(ADMIN_EMAIL, subj, plain, html=html, attachments=attachments)
+
+        # Teams
+        if settings["teams_enabled"] and settings["teams_webhook"]:
+            text = (
+                f"📅 New Assessment Booking\n\n"
+                f"Name: {booking_row[1]}\n"
+                f"Email: {booking_row[2]}\n"
+                f"Phone: {booking_row[3]}\n"
+                f"Date: {pretty_date}\n"
+                f"Time: {booking_row[5]}\n\n"
+                f"(sent by {TEAMS_SENDER_NAME})"
+            )
+            post_to_teams(settings["teams_webhook"], text)
+    except Exception as e:
+        app.logger.exception("notify_on_booking failed: %s", e)
+
+# ---- Scheduler jobs ----
 scheduler = BackgroundScheduler(timezone=LOCAL_TZ)
 
 def daily_summary_job():
@@ -303,9 +333,9 @@ def daily_summary_job():
         send_email_with_attachments(ADMIN_EMAIL, subj, plain, attachments=[(f"bookings_{start}.xlsx", xlsx, "vnd.openxmlformats-officedocument.spreadsheetml.sheet")])
         settings = get_settings()
         if settings["teams_enabled"] and settings["teams_webhook"]:
-            post_to_teams(settings["teams_webhook"], "Daily Booking Summary", f"📊 Daily Booking Summary\n\nBookings today: {len(rows)}\n\nAttached: bookings_{start}.xlsx")
+            post_to_teams(settings["teams_webhook"], f"📊 Daily Booking Summary\n\nBookings today: {len(rows)}\n\nAttached: bookings_{start}.xlsx")
     except Exception as e:
-        app.logger.exception("Daily summary job failed: %s", e)
+        app.logger.exception("daily_summary_job failed: %s", e)
 
 def weekly_summary_job():
     try:
@@ -322,16 +352,16 @@ def weekly_summary_job():
         send_email_with_attachments(ADMIN_EMAIL, subj, plain, attachments=[(f"bookings_{start}_to_{end}.xlsx", xlsx, "vnd.openxmlformats-officedocument.spreadsheetml.sheet")])
         settings = get_settings()
         if settings["teams_enabled"] and settings["teams_webhook"]:
-            post_to_teams(settings["teams_webhook"], "Weekly Booking Summary", f"📈 Weekly Booking Summary\n\nBookings: {len(rows)}\n\nAttached: bookings_{start}_to_{end}.xlsx")
+            post_to_teams(settings["teams_webhook"], f"📈 Weekly Booking Summary\n\nBookings: {len(rows)}\n\nAttached: bookings_{start}_to_{end}.xlsx")
     except Exception as e:
-        app.logger.exception("Weekly summary job failed: %s", e)
+        app.logger.exception("weekly_summary_job failed: %s", e)
 
+# Schedule: daily 17:00, weekly Monday 08:00 (Australia/Sydney)
 scheduler.add_job(daily_summary_job, CronTrigger(hour=17, minute=0, timezone=LOCAL_TZ))
 scheduler.add_job(weekly_summary_job, CronTrigger(day_of_week="mon", hour=8, minute=0, timezone=LOCAL_TZ))
 scheduler.start()
 
-# --------- Admin auth helpers ----------
-from functools import wraps
+# ---- Admin auth decorator ----
 def require_admin(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
@@ -340,7 +370,7 @@ def require_admin(fn):
         return fn(*args, **kwargs)
     return wrapper
 
-# --------- Routes: admin + settings ----------
+# ---- Routes: frontend, admin, settings ----
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -403,22 +433,45 @@ def admin_export():
     csv_bytes = make_csv_bytes(rows)
     return Response(csv_bytes, mimetype="text/csv", headers={"Content-Disposition":"attachment; filename=acop_bookings.csv"})
 
-@app.route("/admin/test-teams")
+# Admin test endpoint for Teams (protected)
+@app.route("/admin/test-teams", methods=["GET"])
+@require_admin
 def admin_test_teams():
-    webhook = os.getenv("TEAMS_WEBHOOK")
+    settings = get_settings()
+    webhook = settings.get("teams_webhook") or os.getenv("TEAMS_WEBHOOK")
     if not webhook:
-        return "TEAMS_WEBHOOK is not set", 500
-
+        return "Teams webhook not configured (admin settings or TEAMS_WEBHOOK env).", 400
     try:
-        r = requests.post(webhook, json={"text": "ACOP Chatbot Test: Teams webhook is working."})
-        if r.status_code in (200, 201, 204):
+        ok = post_to_teams(webhook, "ACOP Chatbot Test: Teams webhook is working.")
+        if ok:
             return "Test message sent successfully!"
         else:
-            return f"Teams returned an error: {r.status_code} – {r.text}"
+            return "Failed to post to Teams (check logs).", 500
     except Exception as e:
-        return f"Request failed: {str(e)}"
+        return f"Request failed: {str(e)}", 500
 
-# --------- Chat endpoint ----------
+# Trigger endpoints (useful for Render Cron Jobs) - protected
+@app.route("/admin/trigger/daily", methods=["POST","GET"])
+@require_admin
+def trigger_daily():
+    try:
+        daily_summary_job()
+        return "Daily summary triggered.", 200
+    except Exception as e:
+        app.logger.exception("Trigger daily failed: %s", e)
+        return "Failed to trigger daily summary.", 500
+
+@app.route("/admin/trigger/weekly", methods=["POST","GET"])
+@require_admin
+def trigger_weekly():
+    try:
+        weekly_summary_job()
+        return "Weekly summary triggered.", 200
+    except Exception as e:
+        app.logger.exception("Trigger weekly failed: %s", e)
+        return "Failed to trigger weekly summary.", 500
+
+# ---- Chat endpoint (fixed flow) ----
 @app.route("/api/message", methods=["POST"])
 def chat():
     data = request.get_json(silent=True) or {}
@@ -430,7 +483,7 @@ def chat():
     reply = ""
 
     try:
-        # Cancel
+        # cancel flow
         if msg.lower() == "cancel" and S.get("date"):
             conn = sqlite3.connect(DB_FILE)
             conn.execute("DELETE FROM bookings WHERE email=? AND date=?", (S.get("email"), S.get("date")))
@@ -439,7 +492,8 @@ def chat():
             reply = "Booking cancelled. Which date? (e.g. 27/11/2025)"
             S["date"] = S["time"] = None
             S["stage"] = "date"
-        # Name
+
+        # NAME
         elif S["stage"] == "name":
             if len(msg) < 2 or any(c.isdigit() for c in msg):
                 reply = "Please enter a valid name."
@@ -447,7 +501,8 @@ def chat():
                 S["name"] = msg.title()
                 S["stage"] = "email"
                 reply = f"Thanks {S['name']}! What's your email?"
-        # Email
+
+        # EMAIL
         elif S["stage"] == "email":
             if "@" not in msg or "." not in msg:
                 reply = "Please enter a valid email."
@@ -455,7 +510,8 @@ def chat():
                 S["email"] = msg.lower()
                 S["stage"] = "phone"
                 reply = "Your phone number?"
-        # Phone
+
+        # PHONE
         elif S["stage"] == "phone":
             if len(msg.replace(" ","").replace("-","")) < 8:
                 reply = "Please enter a valid phone number."
@@ -463,7 +519,8 @@ def chat():
                 S["phone"] = msg
                 S["stage"] = "date"
                 reply = "Which date? (e.g. 27/11/2025)"
-        # Date
+
+        # DATE
         elif S["stage"] == "date":
             try:
                 d = datetime.strptime(msg, "%d/%m/%Y")
@@ -479,7 +536,8 @@ def chat():
                     reply = f"Available on {msg}:\n" + ", ".join(free)
             except:
                 reply = "Use DD/MM/YYYY and choose a future weekday."
-        # Time
+
+        # TIME
         elif S["stage"] == "time":
             t_input = msg.strip().upper().replace(" ", "").replace(".", ":")
             if ":" not in t_input:
@@ -493,25 +551,26 @@ def chat():
             elif is_booked(S["date"], t):
                 reply = "That time is now taken. Please choose another."
             else:
-                # Save booking
+                # Save booking and notify
                 booking_id = save_booking(S["name"], S["email"], S["phone"], S["date"], t)
 
-                # Fetch booking row for notifications
+                # fetch booking row
                 conn = sqlite3.connect(DB_FILE)
                 cur = conn.cursor()
                 cur.execute("SELECT id,name,email,phone,date,time,created_at FROM bookings WHERE id=?", (booking_id,))
                 booking_row = cur.fetchone()
                 conn.close()
 
-                # Send confirmation (student)
-                send_email(S["name"], S["email"], S["phone"], S["date"], t)
+                # student confirmation
+                send_email_confirmation(S["name"], S["email"], S["phone"], S["date"], t)
 
-                # Notify admin (email + CSV + Teams)
+                # admin notifications (email + csv + teams depending on settings)
                 notify_on_booking(booking_row)
 
                 nice_date = datetime.strptime(S["date"], "%Y-%m-%d").strftime("%d %B %Y")
                 reply = f"Confirmed! Your call is on {nice_date} at {t}\n\nType 'cancel' anytime to change it."
                 S.clear()
+
     except Exception as e:
         app.logger.exception("Error in chat flow: %s", e)
         reply = "Sorry — something went wrong. Please try again."
@@ -520,6 +579,6 @@ def chat():
     resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
     return resp
 
-# --------- Run ----------
+# ---- Run ----
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
