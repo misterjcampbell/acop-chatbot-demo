@@ -1,120 +1,25 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ACOP Chatbot</title>
-
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-        }
-
-        /* Floating chat widget button */
-        #chatButton {
-            position: fixed;
-            bottom: 25px;
-            right: 25px;
-            background-color: #0057b7;
-            color: white;
-            padding: 15px 18px;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 22px;
-            box-shadow: 0px 4px 10px rgba(0,0,0,0.3);
-        }
-
-        /* Popup chat window */
-        #chatPopup {
-            display: none;
-            position: fixed;
-            bottom: 80px;
-            right: 25px;
-            width: 350px;
-            height: 500px;
-            background: white;
-            border: 1px solid #ccc;
-            border-radius: 12px;
-            box-shadow: 0 6px 20px rgba(0,0,0,0.25);
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
-
-        #chatHeader {
-            background-color: #0057b7;
-            color: white;
-            padding: 12px;
-            text-align: center;
-            font-size: 18px;
-            font-weight: bold;
-        }
-
-        #chatMessages {
-            padding: 10px;
-            flex: 1;
-            overflow-y: auto;
-        }
-
-        #chatInputContainer {
-            padding: 10px;
-            border-top: 1px solid #ccc;
-            display: flex;
-        }
-
-        #userInput {
-            flex: 1;
-            padding: 8px;
-            border: 1px solid #aaa;
-            border-radius: 6px;
-        }
-
-        #sendBtn {
-            margin-left: 8px;
-            padding: 8px 12px;
-            background-color: #0057b7;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-
-        .message {
-            margin-bottom: 12px;
-            padding: 10px;
-            border-radius: 8px;
-            max-width: 80%;
-        }
-
-        .bot {
-            background-color: #f0f0f0;
-        }
-
-        .user {
-            background-color: #d3e7ff;
-            margin-left: auto;
-        }
-    </style>
+<meta charset="UTF-8">
+<title>ACOP Chatbot</title>
+<script>
+async function sendMessage() {
+    const msg = document.getElementById("msg").value;
+    const res = await fetch("/api/message", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({message: msg})
+    });
+    const data = await res.json();
+    document.getElementById("chat").innerHTML += "<div>User: "+msg+"</div>";
+    document.getElementById("chat").innerHTML += "<div>Bot: "+data.reply+"</div>";
+    document.getElementById("msg").value = "";
+}
+</script>
 </head>
 <body>
-
-    <!-- Floating chat icon -->
-    <div id="chatButton">💬</div>
-
-    <!-- Chat popup -->
-    <div id="chatPopup">
-        <div id="chatHeader">ACOP Chatbot</div>
-
-        <div id="chatMessages"></div>
-
-        <div id="chatInputContainer">
-            <input id="userInput" type="text" placeholder="Type your message..." />
-            <button id="sendBtn">Send</button>
-        </div>
-    </div>
-
-    <!-- JS File -->
-    <script src="script.js"></script>
-
+<div id="chat" style="border:1px solid #ccc; padding:10px; height:300px; overflow:auto;"></div>
+<input id="msg" type="text"><button onclick="sendMessage()">Send</button>
 </body>
 </html>
