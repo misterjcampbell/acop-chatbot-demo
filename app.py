@@ -558,6 +558,11 @@ def api_message():
         app.logger.exception("Error in chat flow: %s", e)
         return jsonify({"reply": "Sorry — server error. Please try again."}), 500
 
+@app.route("/")
+def index():
+    # Ensure you have templates/index.html
+    return render_template("index.html")
+
 # ---------- Render / Run ----------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
