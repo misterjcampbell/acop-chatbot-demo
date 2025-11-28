@@ -1,5 +1,19 @@
-// static/script.js – 100% WORKING VERSION (tested live with your exact backend)
 let currentContext = {};
+
+function toggleChat() {
+    const widget = document.getElementById('chat-widget');
+    const launcher = document.getElementById('chat-launcher');
+    if (widget.style.display === 'none' || widget.style.display === '') {
+        widget.style.display = 'block';
+        launcher.style.display = 'none';
+        if (document.getElementById('chat-messages').children.length === 0) {
+            addMessage("Hi! I'm here to help you book your assessment call. What's your name?", 'bot');
+        }
+    } else {
+        widget.style.display = 'none';
+        launcher.style.display = 'block';
+    }
+}
 
 function addMessage(text, sender) {
     const chat = document.getElementById('chat-messages');
@@ -14,7 +28,6 @@ function sendMessage() {
     const input = document.getElementById('user-input');
     const message = input.value.trim();
     if (!message) return;
-
     addMessage(message, 'user');
     input.value = '';
 
@@ -23,27 +36,25 @@ function sendMessage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: message, context: currentContext })
     })
-    .then(res => res.json())
+    .then(r => r.json())
     .then(data => {
-        // THIS IS THE ONLY LINE THAT MATTERS
-        if (data.messages && data.messages.length > 0) {
+        if (data.messages) {
             data.messages.forEach(m => addMessage(m.text, 'bot'));
         }
         if (data.context) {
             currentContext = data.context;
-            // Auto-show calendar after phone is collected
-            if (currentContext.asked_phone && !document.querySelector('input[type="date"]')) {
-                setTimeout(showCalendar, 800);
+            if (currentContext.asked_phone && !document.getElementById('date-picker')) {
+                setTimeout(showCalendar, 600);
             }
         }
-    })
-    .catch(err => addMessage("Sorry, something went wrong. Please try again.", 'bot'));
+    });
 }
 
 function showCalendar() {
     const chat = document.getElementById('chat-messages');
-    const calendarDiv = document.createElement('div');
-    calendarDiv.innerHTML = `
+    const div = document.createElement('div');
+    div.innerHTML = `
+        <p><strong>Please select your preferred date and time:</strong></p>
         <input type="date" id="date-picker" required>
         <select id="time-picker">
             <option value="10:00">10:00 AM</option>
@@ -52,16 +63,16 @@ function showCalendar() {
             <option value="15:00">3:00 PM</option>
             <option value="16:00">4:00 PM</option>
         </select>
-        <button onclick="bookSlot()">Book This Time</button>
+        <button onclick="bookSlot()" style="margin-top:8px;">Book This Slot</button>
     `;
-    chat.appendChild(calendarDiv);
+    chat.appendChild(div);
     chat.scrollTop = chat.scrollHeight;
 }
 
 function bookSlot() {
     const date = document.getElementById('date-picker').value;
     const time = document.getElementById('time-picker').value;
-    if (!date) return alert("Please pick a date");
+    if (!date) return addMessage("Please choose a date first.", 'bot');
 
     fetch('/check', {
         method: 'POST',
@@ -69,9 +80,9 @@ function bookSlot() {
         body: JSON.stringify({ date, time })
     })
     .then(r => r.json())
-    .then(data => {
-        if (!data.available) {
-            addMessage("Sorry, that time just got taken. Please choose another.", 'bot');
+    .then(res => {
+        if (!res.available) {
+            addMessage("That slot was just taken. Please pick another time.", 'bot');
             return;
         }
 
@@ -80,22 +91,18 @@ function bookSlot() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 name: currentContext.name,
-                phone: currentContext.phone,
-                date: date,
-                time: time
+                phone: currentContext.phone || currentContext.phone,
+                date, time
             })
         })
         .then(r => r.json())
-        .then(res => {
-            addMessage(res.message || "Booking confirmed! See you then.", 'bot');
+        .then(result => {
+            addMessage(result.message || "Your booking is confirmed! Thank you.", 'bot');
         });
     });
 }
 
-// Allow pressing Enter to send
-document.getElementById('user-input').addEventListener('keypress', e => {
+// Send on Enter
+document.getElementById('user-input')?.addEventListener('keypress', e => {
     if (e.key === 'Enter') sendMessage();
 });
-
-// Start the conversation
-addMessage("Hi! I'm here to help you book your assessment call. What's your name?", 'bot');
