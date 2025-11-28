@@ -2,162 +2,83 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ACOP Assessment Booking Assistant</title>
-
-    <link rel="stylesheet" href="/static/style.css">
-
+    <title>Engagement Assessment Chatbot</title>
     <style>
-        /* ACOP Branding */
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f5f7fa;
-            margin: 0;
-            padding: 0;
-        }
-
-        header {
-            width: 100%;
-            background: #003366; /* ACOP navy */
-            padding: 20px;
-            color: white;
-            text-align: center;
-            font-size: 22px;
-            font-weight: bold;
-        }
-
-        /* Chat Button */
-        #openChatBtn {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #0066cc;
-            color: white;
-            border: none;
-            border-radius: 50px;
-            padding: 15px 25px;
-            font-size: 18px;
-            cursor: pointer;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-            z-index: 1000;
-        }
-
-        #openChatBtn:hover {
-            background: #004a99;
-        }
-
-        /* Chat Popup */
-        #chatPopup {
-            display: none; /* hidden by default */
-            position: fixed;
-            bottom: 90px;
-            right: 20px;
-            width: 360px;
-            height: 520px;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 6px 15px rgba(0,0,0,0.2);
-            overflow: hidden;
-            z-index: 1000;
-            border: 1px solid #d1d1d1;
-        }
-
-        #chatHeader {
-            background: #003366;
-            color: white;
-            padding: 12px;
-            font-size: 18px;
-            text-align: center;
-        }
-
-        #chatMessages {
-            height: 360px;
-            overflow-y: auto;
-            padding: 15px;
-        }
-
-        #chatInputArea {
-            padding: 10px;
-            border-top: 1px solid #ccc;
-            display: flex;
-            gap: 8px;
-        }
-
-        #userInput {
-            flex: 1;
-            padding: 10px;
-            border-radius: 8px;
-            border: 1px solid #bbb;
-        }
-
-        #sendBtn {
-            padding: 10px 15px;
-            background: #0066cc;
-            border: none;
-            border-radius: 8px;
-            color: white;
-            cursor: pointer;
-        }
-
-        #sendBtn:hover {
-            background: #004a99;
-        }
-
-        #closeChatBtn {
-            position: absolute;
-            top: 8px;
-            right: 12px;
-            color: white;
-            cursor: pointer;
-            font-size: 18px;
-        }
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        #chat { border: 1px solid #ccc; padding: 20px; height: 400px; overflow-y: auto; }
+        .user { color: blue; }
+        .bot { color: green; }
+        #input-area { margin-top: 10px; }
     </style>
 </head>
-
 <body>
-
-<header>
-    ACOP Assessment Booking Assistant
-</header>
-
-<!-- Chat Button -->
-<button id="openChatBtn">Chat with us</button>
-
-<!-- Chat Popup -->
-<div id="chatPopup">
-    <div id="chatHeader">
-        ACOP Chatbot
-        <span id="closeChatBtn">&times;</span>
+    <h1>Engagement Assessment Chatbot</h1>
+    <div id="chat"></div>
+    <div id="input-area">
+        <input type="text" id="userInput" placeholder="Type here..." />
+        <button onclick="sendMessage()">Send</button>
     </div>
 
-    <div id="chatMessages"></div>
+    <script>
+        const chat = document.getElementById('chat');
+        let step = 0;
+        let formData = {};
 
-    <div id="chatInputArea">
-        <input type="text" id="userInput" placeholder="Type your message...">
-        <button id="sendBtn">Send</button>
-    </div>
-</div>
+        function appendMessage(sender, message) {
+            const div = document.createElement('div');
+            div.className = sender;
+            div.textContent = message;
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
 
-<script src="/static/script.js"></script>
+        function sendMessage() {
+            const input = document.getElementById('userInput');
+            const text = input.value.trim();
+            if (!text) return;
+            appendMessage('user', text);
+            input.value = '';
 
-<script>
-    const openBtn = document.getElementById("openChatBtn");
-    const closeBtn = document.getElementById("closeChatBtn");
-    const popup = document.getElementById("chatPopup");
+            if (step === 0) {
+                formData.name = text;
+                appendMessage('bot', "Great! What's your email?");
+                step++;
+            } else if (step === 1) {
+                formData.email = text;
+                appendMessage('bot', "Thanks! What's your phone number?");
+                step++;
+            } else if (step === 2) {
+                formData.phone = text;
+                appendMessage('bot', "When would you like to book your assessment? (YYYY-MM-DD)");
+                step++;
+            } else if (step === 3) {
+                formData.date = text;
+                appendMessage('bot', "At what time? (HH:MM)");
+                step++;
+            } else if (step === 4) {
+                formData.time = text;
+                appendMessage('bot', "Booking your assessment...");
+                bookAssessment(formData);
+                step++;
+            }
+        }
 
-    openBtn.addEventListener("click", () => {
-        popup.style.display = "block";
+        async function bookAssessment(data) {
+            try {
+                const res = await fetch('/book', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+                appendMessage('bot', result.message);
+            } catch (err) {
+                appendMessage('bot', "Server error. Please try again.");
+            }
+        }
 
-        // Send bot's greeting automatically
-        setTimeout(() => {
-            addBotMessage("Hi! I'm here to help you book your assessment call. What's your name?");
-        }, 300);
-    });
-
-    closeBtn.addEventListener("click", () => {
-        popup.style.display = "none";
-    });
-</script>
-
+        // Initial greeting
+        appendMessage('bot', "Hi! I'm here to help you book your assessment call. What's your name?");
+    </script>
 </body>
 </html>
