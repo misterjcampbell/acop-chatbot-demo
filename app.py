@@ -218,7 +218,7 @@ def admin_logout():
 @app.route("/admin")
 @require_admin
 def admin():
-    bookings = all_bookings()
+    bookings = all_bookings()          # This function returns list of tuples
     return render_template("admin.html", bookings=bookings)
 
 @app.route("/admin/delete/<int:bid>", methods=["POST"])
