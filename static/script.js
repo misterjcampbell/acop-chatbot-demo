@@ -1,1 +1,71 @@
-document.addEventListener('DOMContentLoaded',()=>{const t=document.getElementById('chat-toggle'),p=document.getElementById('chat-popup'),c=document.getElementById('close-chat'),b=document.getElementById('chat-box'),i=document.getElementById('txt'),s=document.getElementById('send');t.onclick=()=>{p.style.display='flex';i.focus()};c.onclick=()=>{p.style.display='none'};function a(m,cl){const d=document.createElement('div');d.className=`msg ${cl}`;d.innerHTML=m.replace(/\n/g,'<br>');b.appendChild(d);b.scrollTop=b.scrollHeight}async function send(){let m=i.value.trim();if(!m)return;a(m,'user');i.value='';const typ=document.createElement('div');typ.className='msg bot';typ.textContent='Typing...';typ.id='typing';b.appendChild(typ);try{const r=await fetch('/api/message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m})});typ.remove();const j=await r.json();a(j.reply,'bot')}catch(e){typ.remove();a('Connection error. Please try again.','bot')}}s.onclick=send;i.onkeypress=e=>{if(e.key==='Enter')send()}});
+document.addEventListener('DOMContentLoaded', () => {
+    const toggle = document.getElementById('chat-toggle');
+    const popup = document.getElementById('chat-popup');
+    const close = document.getElementById('close-chat');
+    const box = document.getElementById('chat-box');
+    const input = document.getElementById('txt');
+    const sendBtn = document.getElementById('send');
+
+    // Open / close chat
+    toggle.onclick = () => {
+        popup.style.display = 'flex';
+        input.focus();
+    };
+    close.onclick = () => {
+        popup.style.display = 'none';
+    };
+
+    // Add message to chat
+    function addMessage(text, sender) {
+        const div = document.createElement('div');
+        div.className = `msg ${12sender}`;
+        div.innerHTML = text.replace(/\n/g, '<br>');
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    // Send message to backend
+    async function sendMessage() {
+        let message = input.value.trim();
+        if (!message) return;
+
+        addMessage(message, 'user');
+        input.value = '';
+
+        // Show typing indicator
+        const typing = document.createElement('div');
+        typing.className = 'msg bot';
+        typing.textContent = 'Typing...';
+        typing.id = 'typing-indicator';
+        box.appendChild(typing);
+
+        try {
+            const response = await fetch('/api/message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: message })
+            });
+
+            typing.remove();
+
+            if (response.ok) {
+                const data = await response.json();
+                addMessage(data.reply, 'bot');
+            } else {
+                addMessage('Sorry, something went wrong. Please try again.', 'bot');
+            }
+        } catch (err) {
+            typing.remove();
+            addMessage('Connection lost. Please check your internet.', 'bot');
+        }
+    }
+
+    // Event listeners
+    sendBtn.onclick = sendMessage;
+    input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+});
