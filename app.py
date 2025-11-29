@@ -406,38 +406,42 @@ def api_message():
     resp = make_response(jsonify({"reply": reply}))
     resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
     return resp
-# === MULTI-MONTH CALENDAR (3 months: prev / current / next) ===
+
+# === PERFECT MONDAY-START MULTI-MONTH CALENDAR (Australian style) ===
 from datetime import datetime, timedelta
 
 def get_one_month(year, month, offset=0):
-    # offset: -1 = previous month, 0 = current, +1 = next month
+    # offset: -1 = prev month, 0 = current, +1 = next month
     try:
-        dt = datetime(year, month, 1) + timedelta(days=32 * offset)
-    except OverflowError:
-        dt = datetime(9999, 12, 1) if offset > 0 else datetime(1, 1, 1)
-    year, month = dt.year, dt.month
-    first = datetime(year, month, 1)
-    start = first - timedelta(days=(first.weekday() + 1) % 7)  # Sunday start
+        base = datetime(year, month, 1) + timedelta(days=32 * offset)
+    except (OverflowError, ValueError):
+        base = datetime(9999, 12, 1) if offset > 0 else datetime(1, 1, 1)
+    year, month = base.year, base.month
+
+    first_day_of_month = datetime(year, month, 1)
+    # Monday = 0, Sunday = 6 → we want Monday start
+    weekday = first_day_of_month.weekday()  # Mon=0 ... Sun=6
+    start = first_day_of_month - timedelta(days=(weekday + 6) % 7)  # Force Monday start
+
     days = []
-    for i in range(42):
-        cur = start + timedelta(days=i)
-        date_str = cur.strftime("%Y-%m-%d")
+    for i in range(42):  # 6 weeks
+        current = start + timedelta(days=i)
+        date_str = current.strftime("%Y-%m-%d")
         days.append({
             "date": date_str,
-            "num": cur.day if cur.month == month else "",
+            "num": current.day if current.month == month else "",
             "blocked": is_date_blocked(date_str)
         })
-    return {
-        "name": cur.strftime("%B %Y"),
-        "days": days
-    }
+
+    month_name = current.strftime("%B %Y")
+    return {"name": month_name, "days": days}
 
 def get_three_months():
     now = datetime.now()
     return [
-        get_one_month(now.year, now.month, -1),
-        get_one_month(now.year, now.month, 0),
-        get_one_month(now.year, now.month, +1)
+        get_one_month(now.year, now.month, -1),  # previous
+        get_one_month(now.year, now.month, 0),   # current
+        get_one_month(now.year, now.month, +1)   # next
     ]
 
 @app.context_processor
