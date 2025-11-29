@@ -307,6 +307,21 @@ def admin_settings():
                          teams_enabled=row[2],
                          teams_webhook=row[3])
 
+@app.route("/admin/test_email", methods=["POST"])
+@require_admin
+def test_email():
+    send_email(ADMIN_EMAIL, "ACOP Test Email", "This is a test – everything is working!", 
+               "<h3>Test Email</h3><p>If you see this, emails are working perfectly.</p>")
+    return "sent"
+
+@app.route("/admin/test_teams", methods=["POST"])
+@require_admin
+def test_teams():
+    webhook = request.form.get("teams_webhook") or TEAMS_WEBHOOK
+    if webhook:
+        requests.post(webhook, json={"text": "ACOP Test Message – Teams is connected!"}, timeout=5)
+    return "sent"
+
 # ==================== CHATBOT ====================
 @app.route("/")
 def index():
