@@ -38,32 +38,47 @@
     </div>
     <hr>
 
-    <!-- MULTI-MONTH CALENDAR BLOCKER -->
-    <div class="calendar-container">
-        <h2 style="text-align:center; color:#004cbf;">Click any day to block/unblock (red = blocked)</h2>
-        <div style="display:flex; flex-wrap:wrap; gap:30px; justify-content:center;">
-            {% for month_data in calendar_months %}
-                <div class="calendar">
-                    <div class="month">{{ month_data.name }}</div>
-                    <div class="days">
-                        <div class="day-header">Sun</div><div class="day-header">Mon</div><div class="day-header">Tue</div>
-                        <div class="day-header">Wed</div><div class="day-header">Thu</div><div class="day-header">Fri</div><div class="day-header">Sat</div>
+    <!-- COMPACT THREE-IN-ONE-ROW CALENDAR -->
+<div style="margin:30px 0; overflow-x:auto;">
+    <h2 style="text-align:center;color:#004cbf;margin-bottom:15px;">
+        Block/Unblock Days — Click any day (red = blocked)
+    </h2>
+    <div style="display:flex; gap:15px; justify-content:center; flex-wrap:wrap;">
+        {% for month in calendar_months %}
+        <div style="background:white; border-radius:10px; padding:12px; box-shadow:0 4px 15px rgba(0,0,0,0.1); min-width:280px;">
+            <div style="text-align:center; font-weight:bold; color:#004cbf; margin-bottom:8px; font-size:15px;">
+                {{ month.name }}
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; text-align:center; font-size:13px;">
+                <div style="font-weight:bold; color:#666;">M</div>
+                <div style="font-weight:bold; color:#666;">T</div>
+                <div style="font-weight:bold; color:#666;">W</div>
+                <div style="font-weight:bold; color:#666;">T</div>
+                <div style="font-weight:bold; color:#666;">F</div>
+                <div style="font-weight:bold; color:#666;">S</div>
+                <div style="font-weight:bold; color:#666;">S</div>
 
-                        {% for day in month_data.days %}
-                            <div class="day {{ 'blocked' if day.blocked else '' }} {{ 'empty' if not day.num else '' }}"
-                                 onclick="toggleDay('{{ day.date }}')"
-                                 style="{{ 'background:#e74c3c;color:white;border-color:#c0392b;' if day.blocked else '' }}">
-                                {{ day.num }}
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endfor %}
+                {% for day in month.days %}
+                    {% if day.num %}
+                        <div onclick="toggleDay('{{ day.date }}')"
+                             style="padding:8px 4px; border-radius:6px; cursor:pointer; font-weight:500;
+                                    background:{{ '#e74c3c' if day.blocked else '#f8f9fa' }};
+                                    color:{{ 'white' if day.blocked else '#333' }};
+                                    border:1px solid {{ '#c0392b' if day.blocked else '#ddd' }};">
+                            {{ day.num }}
+                        </div>
+                    {% else %}
+                        <div></div>
+                    {% endif %}
+                {% endfor %}
+            </div>
         </div>
-        <p style="text-align:center; margin-top:20px; color:#555;">
-            Red = blocked · White = open · Click any day to toggle
-        </p>
+        {% endfor %}
     </div>
+    <p style="text-align:center; margin-top:15px; color:#555; font-size:14px;">
+        Red = blocked · Grey = available · Click to toggle
+    </p>
+</div>
 
     <!-- BOOKINGS TABLE -->
     <h2 style="text-align:center; color:#004cbf;">Current Bookings</h2>
