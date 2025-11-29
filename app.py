@@ -406,6 +406,42 @@ def api_message():
     resp = make_response(jsonify({"reply": reply}))
     resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
     return resp
+# === MULTI-MONTH CALENDAR (3 months: prev / current / next) ===
+from datetime import datetime, timedelta
 
+def get_one_month(year, month, offset=0):
+    # offset: -1 = previous month, 0 = current, +1 = next month
+    try:
+        dt = datetime(year, month, 1) + timedelta(days=32 * offset)
+    except OverflowError:
+        dt = datetime(9999, 12, 1) if offset > 0 else datetime(1, 1, 1)
+    year, month = dt.year, dt.month
+    first = datetime(year, month, 1)
+    start = first - timedelta(days=(first.weekday() + 1) % 7)  # Sunday start
+    days = []
+    for i in range(42):
+        cur = start + timedelta(days=i)
+        date_str = cur.strftime("%Y-%m-%d")
+        days.append({
+            "date": date_str,
+            "num": cur.day if cur.month == month else "",
+            "blocked": is_date_blocked(date_str)
+        })
+    return {
+        "name": cur.strftime("%B %Y"),
+        "days": days
+    }
+
+def get_three_months():
+    now = datetime.now()
+    return [
+        get_one_month(now.year, now.month, -1),
+        get_one_month(now.year, now.month, 0),
+        get_one_month(now.year, now.month, +1)
+    ]
+
+@app.context_processor
+def inject_calendar():
+    return dict(calendar_months=get_three_months())
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
