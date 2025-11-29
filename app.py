@@ -365,6 +365,29 @@ def api_message():
     resp = make_response(jsonify({"reply": reply}))
     resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
     return resp
+@app.route("/admin/block", methods=["POST"])
+@require_admin
+def admin_block():
+    start = request.form["start"]
+    end = request.form["end"]
+    if start <= end:
+        add_blocked_range(start, end)
+    return redirect(url_for("admin"))
+
+@app.route("/admin/unblock/<int:idx>", methods=["POST"])
+@require_admin
+def admin_unblock(idx):
+    ranges = get_blocked_ranges()
+    if 0 <= idx < len(ranges):
+        conn = sqlite3.connect(DB_FILE)
+        conn.execute("DELETE FROM blocked_ranges WHERE rowid = (SELECT rowid FROM blocked_ranges LIMIT 1 OFFSET ?)", (idx,))
+        conn.commit()
+        conn.close()
+    return redirect(url_for("admin"))
+
+@app.context_processor
+def inject_blocked():
+    return dict(blocked_ranges=get_blocked_ranges())
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
