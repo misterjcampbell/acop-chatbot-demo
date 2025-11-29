@@ -1,26 +1,83 @@
 <!DOCTYPE html>
-<html>
-<head><title>ACOP Settings</title>
-<style>
-    body {font-family:Segoe UI,sans-serif;margin:40px;background:#f8f9fa}
-    h1 {color:#004cbf}
-    label {display:block;margin:15px 0 5px;font-weight:bold}
-    input, textarea {width:100%;max-width:500px;padding:10px;font-size:16px}
-    button {background:#0098ea;color:white;padding:12px 30px;border:none;border-radius:6px;font-size:16px;cursor:pointer;margin-top:20px}
-    .back {margin-top:30px}
-</style>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACOP Settings</title>
+    <style>
+        body {font-family:'Segoe UI',sans-serif;margin:0;background:#f5f7fa;color:#333;}
+        .container {max-width:800px;margin:40px auto;padding:30px;background:white;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,0.1);}
+        h1 {color:#004cbf;text-align:center;margin-bottom:30px;}
+        .section {margin:35px 0;padding:25px;background:#f8fbff;border-radius:12px;border-left:5px solid #004cbf;}
+        h2 {color:#004cbf;margin-top:0;font-size:20px;}
+        label {display:block;margin:18px 0;font-size:16px;}
+        input[type="checkbox"] {transform:scale(1.4);margin-right:12px;vertical-align:middle;}
+        input[type="text"] {width:100%;padding:14px;font-size:16px;border:1px solid #ccc;border-radius:8px;box-sizing:border-box;margin-top:8px;}
+        .btn {background:#004cbf;color:white;padding:14px 32px;border:none;border-radius:8px;font-size:17px;cursor:pointer;margin-top:20px;}
+        .btn:hover {background:#003a99;}
+        .back {text-align:center;margin-top:40px;}
+        .back a {color:#0098ea;text-decoration:none;font-size:16px;}
+        .back a:hover {text-decoration:underline;}
+        .test-buttons {display:flex;gap:15px;margin-top:15px;flex-wrap:wrap;}
+        .test-btn {background:#28a745;color:white;padding:10px 20px;border:none;border-radius:6px;cursor:pointer;font-size:14px;}
+        .test-btn.teams {background:#5c2d91;}
+    </style>
 </head>
 <body>
-<h1>Notification Settings</h1>
-<form method="POST">
-    <label><input type="checkbox" name="email_per_booking" {{ 'checked' if email_per_booking }}> Send confirmation email to student</label>
-    <label><input type="checkbox" name="attach_csv" {{ 'checked' if attach_csv }}> Attach CSV to admin email</label>
-    <label><input type="checkbox" name="teams_enabled" {{ 'checked' if teams_enabled }}> Send alert to Microsoft Teams</label>
-    <label>Teams Webhook URL (only if above is ticked)<br>
-        <input type="text" name="teams_webhook" value="{{ teams_webhook }}" placeholder="https://...">
-    </label>
-    <button type="submit">Save Settings</button>
-</form>
-<p class="back"><a href="/admin">← Back to bookings</a></p>
+<div class="container">
+    <h1>Notification & System Settings</h1>
+
+    <form method="POST">
+        <div class="section">
+            <h2>Student Notifications</h2>
+            <label>
+                <input type="checkbox" name="email_per_booking" {{ 'checked' if email_per_booking }}>
+                Send confirmation email + calendar invite to student
+            </label>
+        </div>
+
+        <div class="section">
+            <h2>Office / Admin Alerts</h2>
+            <label>
+                <input type="checkbox" name="attach_csv" {{ 'checked' if attach_csv }}>
+                Attach single-row CSV to admin email (great for quick copy-paste)
+            </label>
+        </div>
+
+        <div class="section">
+            <h2>Microsoft Teams Integration</h2>
+            <label>
+                <input type="checkbox" name="teams_enabled" {{ 'checked' if teams_enabled }}>
+                Send instant message to Teams channel when someone books
+            </label>
+            <label>
+                Teams Webhook URL (only needed if above is ticked)<br>
+                <input type="text" name="teams_webhook" value="{{ teams_webhook }}" placeholder="https://outlook.office.com/webhook/...">
+            </label>
+
+            <div class="test-buttons">
+                <button type="button" class="test-btn" onclick="testEmail()">Send Test Email</button>
+                <button type="button" class="test-btn teams" onclick="testTeams()">Send Test Teams Message</button>
+            </div>
+        </div>
+
+        <div style="text-align:center;">
+            <button type="submit" class="btn">Save All Settings</button>
+        </div>
+    </form>
+
+    <div class="back">
+        <a href="/admin">Back to Bookings & Calendar</a>
+    </div>
+</div>
+
+<script>
+function testEmail() {
+    fetch('/admin/test_email', {method: 'POST'}).then(r => alert('Test email sent! Check your inbox.'));
+}
+function testTeams() {
+    fetch('/admin/test_teams', {method: 'POST'}).then(r => alert('Test message sent to Teams!'));
+}
+</script>
 </body>
 </html>
