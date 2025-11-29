@@ -407,11 +407,10 @@ def api_message():
     resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
     return resp
 
-# === FINAL COMPACT & 100% CORRECT MONDAY-START CALENDAR ===
+# === FINAL COMPACT & 100% CORRECT CALENDAR (NO SYNTAX ERROR) ===
 from datetime import datetime, timedelta
 
 def get_one_month(year, month, offset=0):
-    # Calculate correct month/year
     m = month + offset
     y = year
     while m < 1:
@@ -420,8 +419,7 @@ def get_one_month(year, month, offset=0):
         m -= 12; y += 1
 
     first = datetime(y, m, 1)
-    # weekday(): Mon=0 ... Sun=6 → we want Mon start
-    start = first - timedelta(days=first.weekday())   # THIS IS THE CORRECT LINE
+    start = first - timedelta(days=first.weekday())   # Monday start — perfect
 
     days = []
     for i in range(42):
@@ -436,12 +434,13 @@ def get_one_month(year, month, offset=0):
 def get_three_months():
     now = datetime.now()
     today = now.day
-    # From the 20th of the month onwards, show current + next two
+    
     if today >= 20:
         return [
-            get_one_month(now.year, now.month, 0), \
-            get_one_month(now.year, now.month, 1), \
+            get_one_month(now.year, now.month, 0),
+            get_one_month(now.year, now.month, 1),
             get_one_month(now.year, now.month, 2)
+        ]
     else:
         return [
             get_one_month(now.year, now.month, -1),
