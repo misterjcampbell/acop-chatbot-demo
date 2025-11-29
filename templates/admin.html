@@ -29,23 +29,41 @@
     <p><a href="/admin/settings">Settings</a> | <a href="/admin/export">Export CSV</a> | <a href="/admin/logout">Logout</a></p>
     <hr>
 
-    <!-- Calendar Blocker -->
-    <div class="calendar">
-        <div class="month">Blocked Dates Calendar – click any day to block/unblock</div>
-        <div class="days">
-            <div class="day-header">Sun</div><div class="day-header">Mon</div><div class="day-header">Tue</div>
-            <div class="day-header">Wed</div><div class="day-header">Thu</div><div class="day-header">Fri</div><div class="day-header">Sat</div>
-            {% for day in calendar_days %}
-                <div class="day {{ 'blocked' if day.blocked else 'available' }}" 
-                     onclick="toggleDay('{{ day.date }}')">
-                    {{ day.num if day.num else '' }}
+  <!-- MULTI-MONTH CALENDAR BLOCKER -->
+<div class="calendar-container" style="margin:30px 0;">
+    <h2 style="color:#004cbf; text-align:center;">Click any day to block/unblock (red = blocked)</h2>
+    <div style="display:flex; flex-wrap:wrap; gap:30px; justify-content:center;">
+        {% for month_data in calendar_months %}
+            <div class="calendar" style="background:white;padding:20px;border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,0.1);min-width:320px;">
+                <div class="month" style="text-align:center;font-size:22px;font-weight:bold;margin-bottom:12px;color:#004cbf;">
+                    {{ month_data.name }}
                 </div>
-            {% endfor %}
-        </div>
-        <p style="margin-top:15px; font-size:14px; color:#666">
-            Red = blocked · White = open · Click or drag to toggle
-        </p>
+                <div class="days" style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;text-align:center;">
+                    <div class="day-header" style="font-weight:bold;padding:10px;background:#eef;">Sun</div>
+                    <div class="day-header" style="font-weight:bold;padding:10px;background:#eef;">Mon</div>
+                    <div class="day-header" style="font-weight:bold;padding:10px;background:#eef;">Tue</div>
+                    <div class="day-header" style="font-weight:bold;padding:10px;background:#eef;">Wed</div>
+                    <div class="day-header" style="font-weight:bold;padding:10px;background:#eef;">Thu</div>
+                    <div class="day-header" style="font-weight:bold;padding:10px;background:#eef;">Fri</div>
+                    <div class="day-header" style="font-weight:bold;padding:10px;background:#eef;">Sat</div>
+
+                    {% for day in month_data.days %}
+                        <div class="day {{ 'blocked' if day.blocked else 'available' }}"
+                             onclick="toggleDay('{{ day.date }}')"
+                             style="padding:14px 4px; cursor:pointer; border-radius:8px; transition:all 0.2s;
+                                    {{ 'background:#e74c3c;color:white;border:2px solid #c0392b;' if day.blocked else 'background:white;border:2px solid #ddd;' }}
+                                    {{ '' if day.num else 'visibility:hidden;' }}">
+                            {{ day.num }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endfor %}
     </div>
+    <p style="text-align:center;margin-top:20px;color:#555;">
+        Red = blocked · White = open · Click any day to toggle
+    </p>
+</div>
 
     <!-- Existing bookings table -->
     {% if bookings|length == 0 %}
