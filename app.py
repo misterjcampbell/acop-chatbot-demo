@@ -407,7 +407,7 @@ def api_message():
     resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
     return resp
 
-# === FINAL CORRECT 3-MONTH CALENDAR – NOV / DEC / JAN (as of late Nov 2025) ===
+# === FINAL PERFECT MONDAY-START CALENDAR (Dec 1 = Monday) ===
 from datetime import datetime, timedelta
 
 def get_one_month(year, month, month_offset=0):
@@ -422,17 +422,20 @@ def get_one_month(year, month, month_offset=0):
         target_year += 1
 
     first_of_month = datetime(target_year, target_month, 1)
-    # Monday = 0 → force calendar to start on Monday
-    days_to_monday = (first_of_month.weekday() + 6) % 7
-    start_date = first_of_month - timedelta(days=days_to_monday)
+    # weekday(): Mon=0, Tue=1, Wed=2, Thu=3, Fri=4, Sat=5, Sun=6
+    # We want Monday start (0), so subtract to the nearest Monday before first_of_month
+    weekday = first_of_month.weekday()  # e.g. Dec 1 = 0 (Mon)
+    days_to_subtract = weekday  # If 0 (Mon), subtract 0; if 1 (Tue), subtract 1 to Mon, etc.
+    start_date = first_of_month - timedelta(days=days_to_subtract)
 
     days = []
-    for i in range(42):
+    for i in range(42):  # 6 weeks
         current = start_date + timedelta(days=i)
+        date_str = current.strftime("%Y-%m-%d")
         days.append({
-            "date": current.strftime("%Y-%m-%d"),
+            "date": date_str,
             "num": current.day if current.month == target_month else "",
-            "blocked": is_date_blocked(current.strftime("%Y-%m-%d"))
+            "blocked": is_date_blocked(date_str)
         })
 
     month_name = first_of_month.strftime("%B %Y")
@@ -440,22 +443,11 @@ def get_one_month(year, month, month_offset=0):
 
 def get_three_months():
     now = datetime.now()
-    today = now.day
-
-    # If we're in the last 10 days of the month → show current / next / next-next
-    if today >= 20:  # ← change this number if you want it earlier/later
-        return [
-            get_one_month(now.year, now.month, 0),   # November
-            get_one_month(now.year, now.month, 1),   # December
-            get_one_month(now.year, now.month, 2),   # January
-        ]
-    else:
-        # Otherwise show previous / current / next (standard)
-        return [
-            get_one_month(now.year, now.month, -1),
-            get_one_month(now.year, now.month, 0),
-            get_one_month(now.year, now.month, 1),
-        ]
+    return [
+        get_one_month(now.year, now.month, -1),  # previous
+        get_one_month(now.year, now.month, 0),   # current
+        get_one_month(now.year, now.month, 1),   # next
+    ]
 
 @app.context_processor
 def inject_calendar():
