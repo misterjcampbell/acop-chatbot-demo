@@ -329,20 +329,21 @@ def api_message():
             reply = "Which date? (e.g. 27/11/2025)"
 
     elif S["stage"] == "date":
-        try:
-            d = datetime.strptime(msg, "%d/%m/%Y")
-            if d.weekday() >= 5 or is_past(d.strftime("%Y-%m-%d")):
-                raise ValueError
-            date_str = d.strftime("%Y-%m-%d")
+    try:
+        d = datetime.strptime(msg, "%d/%m/%Y")
+        date_str = d.strftime("%Y-%m-%d")
+        if d.weekday() >= 5 or is_past(date_str) or is_date_blocked(date_str):
+            reply = "Sorry, that date is not available. Please choose another."
+        else:
             free = [t for t in TIME_SLOTS if not is_booked(date_str, t)]
             if not free:
-                reply = "That day is fully booked. Please choose another date."
+                reply = "That day is fully booked. Another date?"
             else:
                 S["date"] = date_str
                 S["stage"] = "time"
                 reply = f"Available on {d.strftime('%d %B %Y')}: {', '.join(free)}"
-        except:
-            reply = "Please use DD/MM/YYYY format and a future weekday."
+    except:
+        reply = "Please use DD/MM/YYYY format."
 
     elif S["stage"] == "time":
         t = msg.strip().upper().replace(" ","").replace(".","")
