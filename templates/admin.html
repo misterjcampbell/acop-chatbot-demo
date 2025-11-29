@@ -1,80 +1,87 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ACOP Bookings Admin</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body {font-family: Segoe UI, sans-serif; margin:40px; background:#f8f9fa}
-        h1 {color:#004cbf}
-        a {margin-right:15px; color:#0098ea}
-        table {width:100%; border-collapse:collapse; margin-top:20px; background:white}
-        th {background:#004cbf; color:white; padding:12px}
-        td {padding:10px; border:1px solid #ddd; text-align:left}
-        tr:nth-child(even) {background:#f8f9ff}
-        button.del {background:#d9534f; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer}
-        
-        /* Calendar styles */
-        .calendar {margin:30px 0; background:white; padding:20px; border-radius:8px; box-shadow:0 4px 15px rgba(0,0,0,0.1)}
-        .month {text-align:center; font-size:24px; font-weight:bold; margin-bottom:10px; color:#004cbf}
-        .days {display:grid; grid-template-columns:repeat(7, 1fr); gap:5px; text-align:center}
-        .day-header {font-weight:bold; padding:10px; background:#eef}
-        .day {padding:15px 5px; cursor:pointer; border-radius:6px; transition:all 0.2s}
-        .day.available {background:#ffffff; border:2px solid #ddd}
-        .day.blocked {background:#e74c3c; color:white; border:2px solid #c0392b}
-        .day:hover {transform:scale(1.08)}
+        body {font-family: 'Segoe UI', sans-serif; margin:40px; background:#f5f7fa; color:#333}
+        h1 {color:#004cbf; text-align:center;}
+        .topbar {text-align:center; margin:20px 0; font-size:18px;}
+        .topbar a {margin:0 15px; color:#0098ea; text-decoration:none;}
+        .topbar a:hover {text-decoration:underline;}
+        .calendar-container {margin:30px auto; max-width:1200px;}
+        .calendar {background:white; padding:20px; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.1); margin-bottom:40px;}
+        .month {text-align:center; font-size:22px; font-weight:bold; margin-bottom:12px; color:#004cbf;}
+        .days {display:grid; grid-template-columns:repeat(7,1fr); gap:6px; text-align:center;}
+        .day-header {font-weight:bold; padding:10px; background:#eef;}
+        .day {padding:14px 4px; cursor:pointer; border-radius:8px; transition:0.2s; border:2px solid #ddd;}
+        .day.blocked {background:#e74c3c; color:white; border-color:#c0392b;}
+        .day:hover {transform:scale(1.08);}
+        .day.empty {visibility:hidden;}
+        table {width:100%; border-collapse:collapse; background:white; box-shadow:0 4px 15px rgba(0,0,0,0.1); margin-top:30px;}
+        th {background:#004cbf; color:white; padding:14px;}
+        td {padding:12px; border-bottom:1px solid #ddd; text-align:left;}
+        tr:nth-child(even) {background:#f8fbff;}
+        .del {background:#d9534f; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;}
+        .empty {text-align:center; color:#888; font-style:italic; padding:40px;}
+        .back {text-align:center; margin:30px;}
     </style>
 </head>
 <body>
+
     <h1>ACOP Bookings Admin</h1>
-    <p><a href="/admin/settings">Settings</a> | <a href="/admin/export">Export CSV</a> | <a href="/admin/logout">Logout</a></p>
+    <div class="topbar">
+        <a href="/admin/settings">Settings</a> |
+        <a href="/admin/export">Export CSV</a> |
+        <a href="/admin/logout">Logout</a>
+    </div>
     <hr>
 
-  <!-- MULTI-MONTH CALENDAR BLOCKER -->
-<div class="calendar-container" style="margin:30px 0;">
-    <h2 style="color:#004cbf; text-align:center;">Click any day to block/unblock (red = blocked)</h2>
-    <div style="display:flex; flex-wrap:wrap; gap:30px; justify-content:center;">
-        {% for month_data in calendar_months %}
-            <div class="calendar" style="background:white;padding:20px;border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,0.1);min-width:320px;">
-                <div class="month" style="text-align:center;font-size:22px;font-weight:bold;margin-bottom:12px;color:#004cbf;">
-                    {{ month_data.name }}
-                </div>
-                <div class="days" style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;text-align:center;">
-                    <div class="day-header" style="font-weight:bold;padding:10px;background:#eef;">Sun</div>
-                    <div class="day-header" style="font-weight:bold;padding:10px;background:#eef;">Mon</div>
-                    <div class="day-header" style="font-weight:bold;padding:10px;background:#eef;">Tue</div>
-                    <div class="day-header" style="font-weight:bold;padding:10px;background:#eef;">Wed</div>
-                    <div class="day-header" style="font-weight:bold;padding:10px;background:#eef;">Thu</div>
-                    <div class="day-header" style="font-weight:bold;padding:10px;background:#eef;">Fri</div>
-                    <div class="day-header" style="font-weight:bold;padding:10px;background:#eef;">Sat</div>
+    <!-- MULTI-MONTH CALENDAR BLOCKER -->
+    <div class="calendar-container">
+        <h2 style="text-align:center; color:#004cbf;">Click any day to block/unblock (red = blocked)</h2>
+        <div style="display:flex; flex-wrap:wrap; gap:30px; justify-content:center;">
+            {% for month_data in calendar_months %}
+                <div class="calendar">
+                    <div class="month">{{ month_data.name }}</div>
+                    <div class="days">
+                        <div class="day-header">Sun</div><div class="day-header">Mon</div><div class="day-header">Tue</div>
+                        <div class="day-header">Wed</div><div class="day-header">Thu</div><div class="day-header">Fri</div><div class="day-header">Sat</div>
 
-                    {% for day in month_data.days %}
-                        <div class="day {{ 'blocked' if day.blocked else 'available' }}"
-                             onclick="toggleDay('{{ day.date }}')"
-                             style="padding:14px 4px; cursor:pointer; border-radius:8px; transition:all 0.2s;
-                                    {{ 'background:#e74c3c;color:white;border:2px solid #c0392b;' if day.blocked else 'background:white;border:2px solid #ddd;' }}
-                                    {{ '' if day.num else 'visibility:hidden;' }}">
-                            {{ day.num }}
-                        </div>
-                    {% endfor %}
+                        {% for day in month_data.days %}
+                            <div class="day {{ 'blocked' if day.blocked else '' }} {{ 'empty' if not day.num else '' }}"
+                                 onclick="toggleDay('{{ day.date }}')"
+                                 style="{{ 'background:#e74c3c;color:white;border-color:#c0392b;' if day.blocked else '' }}">
+                                {{ day.num }}
+                            </div>
+                        {% endfor %}
+                    </div>
                 </div>
-            </div>
-        {% endfor %}
+            {% endfor %}
+        </div>
+        <p style="text-align:center; margin-top:20px; color:#555;">
+            Red = blocked · White = open · Click any day to toggle
+        </p>
     </div>
-    <p style="text-align:center;margin-top:20px;color:#555;">
-        Red = blocked · White = open · Click any day to toggle
-    </p>
-</div>
 
-    <!-- Existing bookings table -->
+    <!-- BOOKINGS TABLE -->
+    <h2 style="text-align:center; color:#004cbf;">Current Bookings</h2>
     {% if bookings|length == 0 %}
-        <p style="font-style:italic; color:#888">No bookings yet.</p>
+        <p class="empty">No bookings yet.</p>
     {% else %}
     <table>
-        <tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Date</th><th>Time</th><th>Action</th></tr>
+        <tr>
+            <th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Date</th><th>Time</th><th>Action</th>
+        </tr>
         {% for b in bookings %}
         <tr>
-            <td>{{ b[0] }}</td><td>{{ b[1] }}</td><td>{{ b[2] }}</td><td>{{ b[3] }}</td>
-            <td>{{ b[4] }}</td><td>{{ b[5] }}</td>
+            <td>{{ b[0] }}</td>
+            <td>{{ b[1] }}</td>
+            <td>{{ b[2] }}</td>
+            <td>{{ b[3] }}</td>
+            <td>{{ b[4]|replace('-','/') }}</td>
+            <td>{{ b[5] }}</td>
             <td>
                 <form method="POST" action="/admin/delete/{{ b[0] }}" style="display:inline"
                       onsubmit="return confirm('Delete this booking?');">
@@ -95,5 +102,6 @@
             }).then(() => location.reload());
         }
     </script>
+
 </body>
 </html>
