@@ -407,45 +407,59 @@ def api_message():
     resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
     return resp
 
-# === PERFECT MONDAY-START MULTI-MONTH CALENDAR (Australian style) ===
+# === FINAL CORRECT 3-MONTH CALENDAR – NOV / DEC / JAN (as of late Nov 2025) ===
 from datetime import datetime, timedelta
 
-def get_one_month(year, month, offset=0):
-    # offset: -1 = prev month, 0 = current, +1 = next month
-    try:
-        base = datetime(year, month, 1) + timedelta(days=32 * offset)
-    except (OverflowError, ValueError):
-        base = datetime(9999, 12, 1) if offset > 0 else datetime(1, 1, 1)
-    year, month = base.year, base.month
+def get_one_month(year, month, month_offset=0):
+    # Calculate correct year/month after offset
+    target_month = month + month_offset
+    target_year = year
+    while target_month < 1:
+        target_month += 12
+        target_year -= 1
+    while target_month > 12:
+        target_month -= 12
+        target_year += 1
 
-    first_day_of_month = datetime(year, month, 1)
-    # Monday = 0, Sunday = 6 → we want Monday start
-    weekday = first_day_of_month.weekday()  # Mon=0 ... Sun=6
-    start = first_day_of_month - timedelta(days=(weekday + 6) % 7)  # Force Monday start
+    first_of_month = datetime(target_year, target_month, 1)
+    # Monday = 0 → force calendar to start on Monday
+    days_to_monday = (first_of_month.weekday() + 6) % 7
+    start_date = first_of_month - timedelta(days=days_to_monday)
 
     days = []
-    for i in range(42):  # 6 weeks
-        current = start + timedelta(days=i)
-        date_str = current.strftime("%Y-%m-%d")
+    for i in range(42):
+        current = start_date + timedelta(days=i)
         days.append({
-            "date": date_str,
-            "num": current.day if current.month == month else "",
-            "blocked": is_date_blocked(date_str)
+            "date": current.strftime("%Y-%m-%d"),
+            "num": current.day if current.month == target_month else "",
+            "blocked": is_date_blocked(current.strftime("%Y-%m-%d"))
         })
 
-    month_name = current.strftime("%B %Y")
+    month_name = first_of_month.strftime("%B %Y")
     return {"name": month_name, "days": days}
 
 def get_three_months():
     now = datetime.now()
-    return [
-        get_one_month(now.year, now.month, -1),  # previous
-        get_one_month(now.year, now.month, 0),   # current
-        get_one_month(now.year, now.month, +1)   # next
-    ]
+    today = now.day
+
+    # If we're in the last 10 days of the month → show current / next / next-next
+    if today >= 20:  # ← change this number if you want it earlier/later
+        return [
+            get_one_month(now.year, now.month, 0),   # November
+            get_one_month(now.year, now.month, 1),   # December
+            get_one_month(now.year, now.month, 2),   # January
+        ]
+    else:
+        # Otherwise show previous / current / next (standard)
+        return [
+            get_one_month(now.year, now.month, -1),
+            get_one_month(now.year, now.month, 0),
+            get_one_month(now.year, now.month, 1),
+        ]
 
 @app.context_processor
 def inject_calendar():
     return dict(calendar_months=get_three_months())
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
