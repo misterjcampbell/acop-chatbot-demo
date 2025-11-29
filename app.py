@@ -60,7 +60,7 @@ def init_db():
 init_db()
 
 def get_settings():
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect()
     cur = conn.cursor()
     cur.execute("SELECT email_per_booking,attach_csv,daily_summary,weekly_summary,teams_enabled,teams_webhook FROM admin_settings WHERE id=1")
     row = cur.fetchone()
@@ -127,7 +127,27 @@ def all_bookings():
     rows = cur.fetchall()
     conn.close()
     return rows
+# === BLOCKED DATE RANGES ===
+def add_blocked_range(start, end):
+    conn = sqlite3.connect(DB_FILE)
+    conn.execute("INSERT INTO blocked_ranges (start_date, end_date) VALUES (?, ?)", (start, end))
+    conn.commit()
+    conn.close()
 
+def get_blocked_ranges():
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("SELECT start_date, end_date FROM blocked_ranges ORDER BY start_date")
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+def is_date_blocked(date_str):  # date_str = '2025-12-24'
+    blocked = get_blocked_ranges()
+    for start, end in blocked:
+        if start <= date_str <= end:
+            return True
+    return False
 # ==================== EMAIL & TEAMS ====================
 def send_email(to, subject, text, html=None, attachments=None):
     msg = EmailMessage()
