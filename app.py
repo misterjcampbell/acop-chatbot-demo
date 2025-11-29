@@ -275,6 +275,38 @@ def toggle_block():
 def inject_calendar():
     return dict(calendar_days=get_calendar_month())
 
+@app.route("/admin/settings", methods=["GET", "POST"])
+@require_admin
+def admin_settings():
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("SELECT email_per_booking, attach_csv, teams_enabled, teams_webhook FROM admin_settings WHERE id=1")
+    row = cur.fetchone()
+    if not row:
+        row = (1, 1, 1, "")
+
+    if request.method == "POST":
+        email_on = 1 if request.form.get("email_per_booking") else 0
+        csv_on = 1 if request.form.get("attach_csv") else 0
+        teams_on = 1 if request.form.get("teams_enabled") else 0
+        webhook = request.form.get("teams_webhook", "").strip()
+
+        conn.execute("""UPDATE admin_settings SET 
+                     email_per_booking=?, attach_csv=?, teams_enabled=?, teams_webhook=?
+                     WHERE id=1""", (email_on, csv_on, teams_on, webhook))
+        conn.commit()
+        flash("Settings saved!")
+        # Update global webhook
+        global TEAMS_WEBHOOK
+        TEAMS_WEBHOOK = webhook if teams_on else ""
+
+    conn.close()
+    return render_template("admin_settings.html",
+                         email_per_booking=row[0],
+                         attach_csv=row[1],
+                         teams_enabled=row[2],
+                         teams_webhook=row[3])
+
 # ==================== CHATBOT ====================
 @app.route("/")
 def index():
