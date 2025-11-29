@@ -11,8 +11,17 @@
         th {background:#004cbf; color:white; padding:12px}
         td {padding:10px; border:1px solid #ddd; text-align:left}
         tr:nth-child(even) {background:#f8f9ff}
-        button {background:#d9534f; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer}
-        .empty {color:#888; font-style:italic; padding:20px; text-align:center}
+        button.del {background:#d9534f; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer}
+        
+        /* Calendar styles */
+        .calendar {margin:30px 0; background:white; padding:20px; border-radius:8px; box-shadow:0 4px 15px rgba(0,0,0,0.1)}
+        .month {text-align:center; font-size:24px; font-weight:bold; margin-bottom:10px; color:#004cbf}
+        .days {display:grid; grid-template-columns:repeat(7, 1fr); gap:5px; text-align:center}
+        .day-header {font-weight:bold; padding:10px; background:#eef}
+        .day {padding:15px 5px; cursor:pointer; border-radius:6px; transition:all 0.2s}
+        .day.available {background:#ffffff; border:2px solid #ddd}
+        .day.blocked {background:#e74c3c; color:white; border:2px solid #c0392b}
+        .day:hover {transform:scale(1.08)}
     </style>
 </head>
 <body>
@@ -20,49 +29,53 @@
     <p><a href="/admin/settings">Settings</a> | <a href="/admin/export">Export CSV</a> | <a href="/admin/logout">Logout</a></p>
     <hr>
 
+    <!-- Calendar Blocker -->
+    <div class="calendar">
+        <div class="month">Blocked Dates Calendar – click any day to block/unblock</div>
+        <div class="days">
+            <div class="day-header">Sun</div><div class="day-header">Mon</div><div class="day-header">Tue</div>
+            <div class="day-header">Wed</div><div class="day-header">Thu</div><div class="day-header">Fri</div><div class="day-header">Sat</div>
+            {% for day in calendar_days %}
+                <div class="day {{ 'blocked' if day.blocked else 'available' }}" 
+                     onclick="toggleDay('{{ day.date }}')">
+                    {{ day.num if day.num else '' }}
+                </div>
+            {% endfor %}
+        </div>
+        <p style="margin-top:15px; font-size:14px; color:#666">
+            Red = blocked · White = open · Click or drag to toggle
+        </p>
+    </div>
+
+    <!-- Existing bookings table -->
     {% if bookings|length == 0 %}
-        <p class="empty">No bookings yet.</p>
+        <p style="font-style:italic; color:#888">No bookings yet.</p>
     {% else %}
     <table>
-        <tr>
-            <th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Date</th><th>Time</th><th>Action</th>
-        </tr>
+        <tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Date</th><th>Time</th><th>Action</th></tr>
         {% for b in bookings %}
         <tr>
-            <td>{{ b[0] }}</td>
-            <td>{{ b[1] }}</td>
-            <td>{{ b[2] }}</td>
-            <td>{{ b[3] }}</td>
-            <td>{{ b[4] }}</td>
-            <td>{{ b[5] }}</td>
+            <td>{{ b[0] }}</td><td>{{ b[1] }}</td><td>{{ b[2] }}</td><td>{{ b[3] }}</td>
+            <td>{{ b[4] }}</td><td>{{ b[5] }}</td>
             <td>
                 <form method="POST" action="/admin/delete/{{ b[0] }}" style="display:inline"
                       onsubmit="return confirm('Delete this booking?');">
-                    <button type="submit">Delete</button>
+                    <button type="submit" class="del">Delete</button>
                 </form>
             </td>
         </tr>
         {% endfor %}
     </table>
     {% endif %}
-<h3>Block Date Range (e.g. Christmas break)</h3>
-<form method="POST" action="/admin/block">
-    From: <input type="date" name="start" required>
-    To:   <input type="date" name="end" required>
-    <button type="submit" style="background:#dc3545;color:white;padding:8px 16px;border:none;border-radius:4px;">Block Range</button>
-</form>
 
-<h4>Currently blocked ranges:</h4>
-<ul>
-{% for r in blocked_ranges %}
-    <li>{{ r[0] }} → {{ r[1] }} 
-        <form method="POST" action="/admin/unblock/{{ loop.index0 }}" style="display:inline;">
-            <button type="submit" style="background:#6c757d;color:white;border:none;padding:4px 8px;font-size:12px;">Remove</button>
-        </form>
-    </li>
-{% else %}
-    <li>None</li>
-{% endfor %}
-</ul>
+    <script>
+        function toggleDay(date) {
+            fetch('/admin/toggle_block', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({date: date})
+            }).then(() => location.reload());
+        }
+    </script>
 </body>
 </html>
