@@ -58,7 +58,16 @@ def init_db():
     conn.commit()
     conn.close()
 init_db()
-
+conn = sqlite3.connect(DB_FILE)
+conn.execute("""
+    CREATE TABLE IF NOT EXISTS blocked_ranges (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL
+    )
+""")
+conn.commit()
+conn.close()
 def get_settings():
     conn = sqlite3.connect()
     cur = conn.cursor()
