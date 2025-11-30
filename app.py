@@ -395,27 +395,26 @@ def api_message():
             S["stage"] = "phone"
             reply = "Your phone number?"
 
-    elif S["stage"] == "phone":
-        cleaned = "".join(c for c in msg if c.isdigit() or c in " -+")
+ elif S["stage"] == "phone":
+        cleaned = "".join(c for c in msg if c.isdigit() or c in "+- ")
         if len(cleaned) < 8:
             reply = "Please enter a valid phone number."
         else:
-            S["phone"] = msg
+            S["phone"] = msg.strip()
             S["stage"] = "date"
-            reply = "Which date? (e.g. 27/11/2025)"
+            reply = "Great! Which date would you like?\n(please use DD/MM/YYYY format, e.g. 15/01/2026)"
 
-elif S["stage"] == "date":
+    elif S["stage"] == "date":
         try:
             d = datetime.strptime(msg.strip(), "%d/%m/%Y")
             date_str = d.strftime("%Y-%m-%d")
             
-            # Check if weekend, past, blocked, or fully booked
-            if d.weekday() >= 5:  # Saturday or Sunday
-                reply = find_next_available_days(date_str)
+            if d.weekday() >= 5:  # weekend
+                reply = "We are closed on weekends.\n\n" + find_next_available_days(date_str)
             elif is_past(date_str):
                 reply = "That date is in the past.\n\n" + find_next_available_days(date_str)
             elif is_date_blocked(date_str):
-                reply = "That date is not available (public holiday / office closed).\n\n" + find_next_available_days(date_str)
+                reply = "That date is not available (office closed / public holiday).\n\n" + find_next_available_days(date_str)
             else:
                 free = [t for t in TIME_SLOTS if not is_booked(date_str, t)]
                 if not free:
@@ -426,10 +425,6 @@ elif S["stage"] == "date":
                     reply = f"Available on {d.strftime('%d %B %Y')}:\n{', '.join(free)}"
         except ValueError:
             reply = "Please enter the date in DD/MM/YYYY format (e.g. 15/01/2026)"
-
-    elif S["stage"] == "time":
-        # (leave your existing time block exactly as it is — no changes needed here)
-        # ... your current time-handling code stays 100% the same ...
 
     elif S["stage"] == "time":
         t = msg.strip().upper().replace(" ","").replace(".","")
