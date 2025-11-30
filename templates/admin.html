@@ -38,30 +38,31 @@
     </div>
     <hr>
 
-    <!-- COMPACT THREE-IN-ONE-ROW CALENDAR – NOW UPDATES INSTANTLY -->
-<div style="margin:40px 0; overflow-x:auto;">
-    <h2 style="text-align:center;color:#004cbf;margin-bottom:20px;">
+<!-- FINAL WORKING COMPACT CALENDAR – INSTANT TOGGLE + CORRECT DATES -->
+<div style="margin:40px 0;">
+    <h2 style="text-align:center; color:#004cbf; margin-bottom:20px;">
         Block/Unblock Days — Click any day (red = blocked)
     </h2>
-    <div style="display:flex; gap:20px; justify-content:center; flex-wrap:wrap;">
+    <div style="display:flex; gap:20px; justify-content:center; flex-wrap:wrap; overflow-x:auto; padding:10px;">
         {% for month in calendar_months %}
-        <div style="background:white; border-radius:12px; padding:15px; box-shadow:0 6px 20px rgba(0,0,0,0.1); min-width:290px;">
-            <div style="text-align:center; font-weight:bold; color:#004cbf; margin-bottom:10px; font-size:16px;">
+        <div style="background:white; border-radius:12px; padding:16px; box-shadow:0 6px 20px rgba(0,0,0,0.1); min-width:300px;">
+            <div style="text-align:center; font-weight:bold; color:#004cbf; margin-bottom:12px; font-size:17px;">
                 {{ month.name }}
             </div>
-            <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:5px; text-align:center; font-size:14px;">
-                <div style="font-weight:bold; color:#666;">M</div>
-                <div style="font-weight:bold; color:#666;">T</div>
-                <div style="font-weight:bold; color:#666;">W</div>
-                <div style="font-weight:bold; color:#666;">T</div>
-                <div style="font-weight:bold; color:#666;">F</div>
-                <div style="font-weight:bold; color:#666;">S</div>
-                <div style="font-weight:bold; color:#666;">S</div>
+            <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:6px; text-align:center; font-size:14px;">
+                <div style="font-weight:bold; color:#555; padding:8px 0;">M</div>
+                <div style="font-weight:bold; color:#555; padding:8px 0;">T</div>
+                <div style="font-weight:bold; color:#555; padding:8px 0;">W</div>
+                <div style="font-weight:bold; color:#555; padding:8px 0;">T</div>
+                <div style="font-weight:bold; color:#555; padding:8px 0;">F</div>
+                <div style="font-weight:bold; color:#555; padding:8px 0;">S</div>
+                <div style="font-weight:bold; color:#555; padding:8px 0;">S</div>
 
                 {% for day in month.days %}
                     {% if day.num %}
-                        <div onclick="toggleDay('{{ day.date }}', this)"
-                             style="padding:10px 4px; border-radius:8px; cursor:pointer; font-weight:600;
+                        <div class="cal-day" 
+                             data-date="{{ day.date }}"
+                             style="padding:10px; border-radius:8px; cursor:pointer; font-weight:600;
                                     background:{{ '#e74c3c' if day.blocked else '#f8f9fa' }};
                                     color:{{ 'white' if day.blocked else '#333' }};
                                     border:2px solid {{ '#c0392b' if day.blocked else '#ddd' }};">
@@ -75,32 +76,33 @@
         </div>
         {% endfor %}
     </div>
-    <p style="text-align:center; margin-top:20px; color:#555;">
-        Red = blocked · Grey = available · Click to toggle instantly
+    <p style="text-align:center; margin-top:20px; color:#666; font-size:15px;">
+        Red = blocked · Grey = available · Click any day to toggle instantly
     </p>
 </div>
 
 <script>
-function toggleDay(date, element) {
-    fetch('/admin/toggle_block', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({date: date})
-    })
-    .then(() => {
-        // Instantly toggle colour without full reload
-        const isBlocked = element.style.background.includes('e74c3c');
-        if (isBlocked)  {
-            element.style.background = '#f8f9fa';
-            element.style.color = '#333';
-            element.style.border = '2px solid #ddd';
-        } else {
-            element.style.background = '#e74c3c';
-            element.style.color = 'white';
-            element.style.border = '2px solid #c0392b';
-        }
+document.querySelectorAll('.cal-day').forEach(day => {
+    day.addEventListener('click', function() {
+        const date = this.dataset.date;
+        fetch('/admin/toggle_block', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({date: date})
+        })
+        .then(() => {
+            if (this.style.background.includes('e74c3c')) {
+                this.style.background = '#f8f9fa';
+                this.style.color = '#333';
+                this.style.border = '2px solid #ddd';
+            } else {
+                this.style.background = '#e74c3c';
+                this.style.color = 'white';
+                this.style.border = '2px solid #c0392b';
+            }
+        });
     });
-}
+});
 </script>
 
     <!-- BOOKINGS TABLE -->
