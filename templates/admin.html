@@ -38,31 +38,32 @@
     </div>
     <hr>
 
-<!-- FINAL WORKING COMPACT CALENDAR – INSTANT TOGGLE + CORRECT DATES -->
+<!-- FINAL CALENDAR – WORKS WITH YOUR RANGE-BASED BLOCKING + INSTANT TOGGLE -->
 <div style="margin:40px 0;">
-    <h2 style="text-align:center; color:#004cbf; margin-bottom:20px;">
+    <h2 style="text-align:center; color:#004cbf; margin-bottom:20px; font-size:20px;">
         Block/Unblock Days — Click any day (red = blocked)
     </h2>
-    <div style="display:flex; gap:20px; justify-content:center; flex-wrap:wrap; overflow-x:auto; padding:10px;">
+
+    <div style="display:flex; gap:25px; justify-content:center; flex-wrap:wrap; padding:10px; overflow-x:auto;">
         {% for month in calendar_months %}
-        <div style="background:white; border-radius:12px; padding:16px; box-shadow:0 6px 20px rgba(0,0,0,0.1); min-width:300px;">
-            <div style="text-align:center; font-weight:bold; color:#004cbf; margin-bottom:12px; font-size:17px;">
+        <div style="background:#fff; border-radius:14px; padding:18px; box-shadow:0 8px 25px rgba(0,0,0,0.12); min-width:310px;">
+            <div style="text-align:center; font-weight:bold; color:#004cbf; margin-bottom:14px; font-size:18px;">
                 {{ month.name }}
             </div>
-            <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:6px; text-align:center; font-size:14px;">
-                <div style="font-weight:bold; color:#555; padding:8px 0;">M</div>
-                <div style="font-weight:bold; color:#555; padding:8px 0;">T</div>
-                <div style="font-weight:bold; color:#555; padding:8px 0;">W</div>
-                <div style="font-weight:bold; color:#555; padding:8px 0;">T</div>
-                <div style="font-weight:bold; color:#555; padding:8px 0;">F</div>
-                <div style="font-weight:bold; color:#555; padding:8px 0;">S</div>
-                <div style="font-weight:bold; color:#555; padding:8px 0;">S</div>
+            <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:7px; text-align:center;">
+                <div style="font-weight:bold; color:#555; font-size:13px;">M</div>
+                <div style="font-weight:bold; color:#555; font-size:13px;">T</div>
+                <div style="font-weight:bold; color:#555; font-size:13px;">W</div>
+                <div style="font-weight:bold; color:#555; font-size:13px;">T</div>
+                <div style="font-weight:bold; color:#555; font-size:13px;">F</div>
+                <div style="font-weight:bold; color:#555; font-size:13px;">S</div>
+                <div style="font-weight:bold; color:#555; font-size:13px;">S</div>
 
                 {% for day in month.days %}
                     {% if day.num %}
-                        <div class="cal-day" 
+                        <div class="cal-day"
                              data-date="{{ day.date }}"
-                             style="padding:10px; border-radius:8px; cursor:pointer; font-weight:600;
+                             style="padding:11px 6px; border-radius:9px; cursor:pointer; font-weight:600; font-size:14px;
                                     background:{{ '#e74c3c' if day.blocked else '#f8f9fa' }};
                                     color:{{ 'white' if day.blocked else '#333' }};
                                     border:2px solid {{ '#c0392b' if day.blocked else '#ddd' }};">
@@ -76,22 +77,26 @@
         </div>
         {% endfor %}
     </div>
-    <p style="text-align:center; margin-top:20px; color:#666; font-size:15px;">
+
+    <p style="text-align:center; margin-top:25px; color:#666; font-size:15px;">
         Red = blocked · Grey = available · Click any day to toggle instantly
     </p>
 </div>
 
 <script>
-document.querySelectorAll('.cal-day').forEach(day => {
-    day.addEventListener('click', function() {
+// Instant toggle — works perfectly with your range-based backend
+document.querySelectorAll('.cal-day').forEach(cell => {
+    cell.addEventListener('click', function() {
         const date = this.dataset.date;
         fetch('/admin/toggle_block', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({date: date})
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: date })
         })
         .then(() => {
-            if (this.style.background.includes('e74c3c')) {
+            // Flip colour instantly
+            const isBlocked = this.style.backgroundColor === 'rgb(231, 76, 60)'; // #e74c3c
+            if (isBlocked) {
                 this.style.background = '#f8f9fa';
                 this.style.color = '#333';
                 this.style.border = '2px solid #ddd';
@@ -100,11 +105,11 @@ document.querySelectorAll('.cal-day').forEach(day => {
                 this.style.color = 'white';
                 this.style.border = '2px solid #c0392b';
             }
-        });
+        })
+        .catch(() => alert('Error – try again'));
     });
 });
 </script>
-
     <!-- BOOKINGS TABLE -->
     <h2 style="text-align:center; color:#004cbf;">Current Bookings</h2>
     {% if bookings|length == 0 %}
