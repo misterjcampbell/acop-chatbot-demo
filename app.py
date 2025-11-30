@@ -294,17 +294,18 @@ def admin_export():
 @require_admin
 def toggle_block():
     data = request.get_json()
-    date = data["date"]
-    blocked = get_blocked_ranges()
-    for s, e in blocked:
-        if s <= date <= e:
-            conn = sqlite3.connect(DB_FILE)
-            conn.execute("DELETE FROM blocked_ranges WHERE start_date=? AND end_date=?", (s, e))
-            conn.commit()
-            conn.close()
-            return "removed"
-    add_blocked_range(date, date)
-    return "added"
+    date = data.get("date")
+    if date:
+        conn = sqlite3.connect(DB_FILE)
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM blocked_dates WHERE date = ?", (date,))
+        if cur.fetchone():
+            conn.execute("DELETE FROM blocked_dates WHERE date = ?", (date,))
+        else:
+            conn.execute("INSERT INTO blocked_dates (date) VALUES (?)", (date,))
+        conn.commit()
+        conn.close()
+    return jsonify({"status": "ok"})
 
 @app.context_processor
 def inject_calendar():
