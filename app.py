@@ -394,7 +394,8 @@ def api_message():
             S["email"] = msg
             S["stage"] = "phone"
             reply = "Your phone number?"
-elif S["stage"] == "phone":
+
+    elif S["stage"] == "phone":
         cleaned = "".join(c for c in msg if c.isdigit() or c in "+- ")
         if len(cleaned) < 8:
             reply = "Please enter a valid phone number (e.g. 0412 345 678)."
@@ -407,7 +408,7 @@ elif S["stage"] == "phone":
         try:
             d = datetime.strptime(msg.strip(), "%d/%m/%Y")
             date_str = d.strftime("%Y-%m-%d")
-            
+
             if d.weekday() >= 5:  # weekend
                 reply = "We are closed on weekends.\n\n" + find_next_available_days(date_str)
             elif is_past(date_str):
@@ -422,9 +423,10 @@ elif S["stage"] == "phone":
                     S["date"] = date_str
                     S["stage"] = "time"
                     reply = f"Available on {d.strftime('%d %B %Y')}:\n{', '.join(free)}"
-                    
+
         except ValueError:
             reply = "Please enter the date in DD/MM/YYYY format (e.g. 15/01/2026)"
+
     elif S["stage"] == "time":
         t = msg.strip().upper().replace(" ","").replace(".","")
         if t in ["9","9AM","900"]: t = "09:00"
@@ -437,7 +439,7 @@ elif S["stage"] == "phone":
         else:
             bid = save_booking(S["name"], S["email"], S["phone"], S["date"], t)
             send_confirmation(S["name"], S["email"], S["phone"], S["date"], t)
-            notify_admin(all_bookings()[-1])  # last one
+            notify_admin(all_bookings()[-1])
             nice = datetime.strptime(S["date"], "%Y-%m-%d").strftime("%d %B %Y")
             reply = f"Confirmed! Your call is on {nice} at {t}\n\nType 'cancel' to change."
             app.chat_sessions.pop(sid, None)
@@ -445,35 +447,6 @@ elif S["stage"] == "phone":
     resp = make_response(jsonify({"reply": reply}))
     resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
     return resp
-
-
-def find_next_available_days(start_from=None):
-    if start_from is None:
-        start_from = datetime.now().strftime("%Y-%m-%d")
-    start = datetime.strptime(start_from, "%Y-%m-%d")
-    found = 0
-    suggestions = []
-    
-    for i in range(1, 90):  # look ahead max 3 months
-        check = start + timedelta(days=i)
-        if check.weekday() >= 5:  # skip weekends
-            continue
-        date_str = check.strftime("%Y-%m-%d")
-        if is_date_blocked(date_str):
-            continue
-        free = [t for t in TIME_SLOTS if not is_booked(date_str, t)]
-        if free:
-            pretty = check.strftime("%A %d %B")
-            slots = ", ".join(free)
-            suggestions.append(f"• {pretty} – {slots}")
-            found += 1
-            if found == 3:
-                break
-    
-    if suggestions:
-        return f"That date is not available.\n\nHere are the next 3 open days:\n" + "\n".join(suggestions) + "\n\nJust reply with your preferred date!"
-    else:
-        return "No slots available in the next 3 months. Please check back later."
 
 # === FINAL COMPACT & 100% CORRECT CALENDAR (NO SYNTAX ERROR) ===
 from datetime import datetime, timedelta
