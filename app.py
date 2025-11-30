@@ -394,15 +394,14 @@ def api_message():
             S["email"] = msg
             S["stage"] = "phone"
             reply = "Your phone number?"
-
- elif S["stage"] == "phone":
+elif S["stage"] == "phone":
         cleaned = "".join(c for c in msg if c.isdigit() or c in "+- ")
         if len(cleaned) < 8:
-            reply = "Please enter a valid phone number."
+            reply = "Please enter a valid phone number (e.g. 0412 345 678)."
         else:
             S["phone"] = msg.strip()
             S["stage"] = "date"
-            reply = "Great! Which date would you like?\n(please use DD/MM/YYYY format, e.g. 15/01/2026)"
+            reply = "Great! Which date would you like?\nPlease use DD/MM/YYYY format (e.g. 15/01/2026)"
 
     elif S["stage"] == "date":
         try:
@@ -414,7 +413,7 @@ def api_message():
             elif is_past(date_str):
                 reply = "That date is in the past.\n\n" + find_next_available_days(date_str)
             elif is_date_blocked(date_str):
-                reply = "That date is not available (office closed / public holiday).\n\n" + find_next_available_days(date_str)
+                reply = "That date is not available (office closed or public holiday).\n\n" + find_next_available_days(date_str)
             else:
                 free = [t for t in TIME_SLOTS if not is_booked(date_str, t)]
                 if not free:
@@ -423,9 +422,9 @@ def api_message():
                     S["date"] = date_str
                     S["stage"] = "time"
                     reply = f"Available on {d.strftime('%d %B %Y')}:\n{', '.join(free)}"
+                    
         except ValueError:
             reply = "Please enter the date in DD/MM/YYYY format (e.g. 15/01/2026)"
-
     elif S["stage"] == "time":
         t = msg.strip().upper().replace(" ","").replace(".","")
         if t in ["9","9AM","900"]: t = "09:00"
