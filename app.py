@@ -1,3 +1,4 @@
+# FORCE REBUILD 2025-12-01
 # app.py - ACOP Booking Chatbot - FINAL WITH CLICKABLE CALENDAR BLOCKER
 from flask import (
     Flask, request, jsonify, render_template, redirect, url_for,
