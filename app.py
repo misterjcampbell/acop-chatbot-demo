@@ -146,6 +146,41 @@ def get_calendar_month(year=None, month=None):
         })
     return days
 
+
+
+def find_next_available_days(start_from=None):
+    if start_from is None:
+        start_from = datetime.now().strftime("%Y-%m-%d")
+    start = datetime.strptime(start_from, "%Y-%m-%d")
+    found = 0
+    suggestions = []
+    
+    for i in range(1, 90):  # look max 3 months ahead
+        check = start + timedelta(days=i)
+        if check.weekday() >= 5:  # skip weekends
+            continue
+        date_str = check.strftime("%Y-%m-%d")
+        if is_date_blocked(date_str):
+            continue
+        free = [t for t in TIME_SLOTS if not is_booked(date_str, t)]
+        if free:
+            pretty = check.strftime("%A %d %B")
+            suggestions.append(f"• {pretty} – {', '.join(free)}")
+            found += 1
+            if found >= 3:
+                break
+    
+    if suggestions:
+        return "Here are the next 3 available days with spots:\n\n" + "\n".join(suggestions) + "\n\nJust reply with your preferred date!"
+    else:
+        return "No availability in the next 3 months. Please check back later or contact us directly."
+
+# Helper for past dates
+def is_past(date_str):
+    return datetime.strptime(date_str, "%Y-%m-%d").date() < datetime.now().date()
+
+
+
 # ==================== EMAIL & TEAMS ====================
 def send_email(to, subject, text, html=None, attachments=None):
     msg = EmailMessage()
@@ -369,25 +404,32 @@ def api_message():
             S["stage"] = "date"
             reply = "Which date? (e.g. 27/11/2025)"
 
-    # === REPLACE THE WHOLE "elif S["stage"] == "date":" BLOCK WITH THIS ===
 elif S["stage"] == "date":
-    try:
-        d = datetime.strptime(msg.strip(), "%d/%m/%Y")
-        date_str = d.strftime("%Y-%m-%d")
-        
-        if d.weekday() >= 5 or is_past(date_str) or is_date_blocked(date_str):
-            # BLOCKED OR WEEKEND → show next 3 available days
-            reply = find_next_available_days(date_str)
-        else:
-            free = [t for t in TIME_SLOTS if not is_booked(date_str, t)]
-            if not free:
+        try:
+            d = datetime.strptime(msg.strip(), "%d/%m/%Y")
+            date_str = d.strftime("%Y-%m-%d")
+            
+            # Check if weekend, past, blocked, or fully booked
+            if d.weekday() >= 5:  # Saturday or Sunday
                 reply = find_next_available_days(date_str)
+            elif is_past(date_str):
+                reply = "That date is in the past.\n\n" + find_next_available_days(date_str)
+            elif is_date_blocked(date_str):
+                reply = "That date is not available (public holiday / office closed).\n\n" + find_next_available_days(date_str)
             else:
-                S["date"] = date_str
-                S["stage"] = "time"
-                reply = f"Available on {d.strftime('%d %B %Y')}: {', '.join(free)}"
-    except ValueError:
-        reply = "Please use DD/MM/YYYY format (e.g. 15/01/2026)"
+                free = [t for t in TIME_SLOTS if not is_booked(date_str, t)]
+                if not free:
+                    reply = "That day is fully booked.\n\n" + find_next_available_days(date_str)
+                else:
+                    S["date"] = date_str
+                    S["stage"] = "time"
+                    reply = f"Available on {d.strftime('%d %B %Y')}:\n{', '.join(free)}"
+        except ValueError:
+            reply = "Please enter the date in DD/MM/YYYY format (e.g. 15/01/2026)"
+
+    elif S["stage"] == "time":
+        # (leave your existing time block exactly as it is — no changes needed here)
+        # ... your current time-handling code stays 100% the same ...
 
     elif S["stage"] == "time":
         t = msg.strip().upper().replace(" ","").replace(".","")
