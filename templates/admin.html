@@ -143,15 +143,24 @@ function toggleDay(element) {
     </table>
     {% endif %}
 
-    <script>
-        function toggleDay(date) {
-            fetch('/admin/toggle_block', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({date: date})
-            }).then(() => location.reload());
-        }
-    </script>
+   <script>
+function toggleDay(el) {
+    const date = el.dataset.date;
+    fetch('/admin/toggle_block', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({date: date})
+    })
+    .then(r => r.json())
+    .then(data => {
+        el.classList.toggle('blocked');  // instantly flips red ↔ grey
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Error – please refresh and try again');
+    });
+}
+</script>
 
 </body>
 </html>
