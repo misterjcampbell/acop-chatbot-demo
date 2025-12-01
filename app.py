@@ -150,33 +150,28 @@ def get_calendar_month(year=None, month=None):
 
 
 def find_next_available_days(start_from=None):
-    # ALWAYS start from TODAY — ignore anything in the past
     today = datetime.now().date()
     start = datetime.now()
 
-    # If user typed a date, just use it as a hint but never go backwards
     if start_from:
         try:
             hint = datetime.strptime(start_from, "%Y-%m-%d").date()
-            if hint > today:
+            if hint >= today:
                 start = datetime.strptime(start_from, "%Y-%m-%d")
         except:
-            pass  # ignore invalid format
+            pass
 
     found = 0
     suggestions = []
-
-    for i in range(0, 120):  # look up to 4 months ahead
+    for i in range(0, 120):
         check = start + timedelta(days=i)
         if check.date() < today:
-            continue  # skip any date before today
-        if check.weekday() >= 5:  # skip weekends
             continue
-
+        if check.weekday() >= 5:  # weekend
+            continue
         date_str = check.strftime("%Y-%m-%d")
         if is_date_blocked(date_str):
             continue
-
         free = [t for t in TIME_SLOTS if not is_booked(date_str, t)]
         if free:
             pretty = check.strftime("%A %d %B")
@@ -188,8 +183,7 @@ def find_next_available_days(start_from=None):
     if suggestions:
         return "Here are the next 3 available days:\n\n" + "\n".join(suggestions) + "\n\nJust reply with your preferred date!"
     else:
-        return "No availability in the next 4 months. Please contact us directly."
-# Helper for past dates
+        return "No availability in the next few months. Please contact us directly."# Helper for past dates
 def is_past(date_str):
     try:
         return datetime.strptime(date_str, "%Y-%m-%d").date() < datetime.now().date()
