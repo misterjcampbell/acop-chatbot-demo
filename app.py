@@ -293,27 +293,29 @@ def admin_export():
 
 @app.route("/admin/toggle_block", methods=["POST"])
 def toggle_block():
-    data = request.get_json()
-    date = data.get("date")
-    if not date:
-        return jsonify({"error": "no date"}), 400
+    try:
+        data = request.get_json() or {}
+        date = data.get("date")
+        if not date:
+            return jsonify({"error": "no date"}), 400
 
-    # Check if this date is part of any existing blocked range
-    with sqlite3.connect(DB_FILE) as conn:
-        cur = conn.execute("SELECT start_date, end_date FROM blocked_ranges")
-        ranges = cur.fetchall()
+        with sqlite3.connect(DB_FILE) as conn:
+            # Check if date is inside any blocked range → remove whole range
+            cur = conn.execute("SELECT start_date, end_date FROM blocked_ranges")
+            for start, end in cur.fetchall():
+                if start <= date <= end:
+                    conn.execute("DELETE FROM blocked_ranges WHERE start_date=? AND end_date=?", (start, end))
+                    conn.commit()
+                    return jsonify({"status": "unblocked"})
 
-        for start, end in ranges:
-            if start <= date <= end:
-                # Date is already blocked → remove the whole range
-                conn.execute("DELETE FROM blocked_ranges WHERE start_date=? AND end_date=?", (start, end))
-                conn.commit()
-                return jsonify({"status": "unblocked"})
+            # Not blocked → block single day
+            conn.execute("INSERT INTO blocked_ranges (start_date, end_date) VALUES (?, ?)", (date, date))
+            conn.commit()
+            return jsonify({"status": "blocked"})
 
-        # Not blocked → block just this single day
-        conn.execute("INSERT INTO blocked_ranges (start_date, end_date) VALUES (?, ?)", (date, date))
-        conn.commit()
-        return jsonify({"status": "blocked"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.context_processor
 def inject_calendar():
     return dict(calendar_days=get_calendar_month())
