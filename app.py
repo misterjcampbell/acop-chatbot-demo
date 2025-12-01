@@ -490,7 +490,7 @@ def api_message():
                 notify_admin(all_bookings()[-1])
                 reply = f"Confirmed! Your call is on {nice_date} at {t}\n\nType 'cancel' to change."
                 app.chat_sessions.pop(sid, None)
-                resp = make_response(jsonify({"reply": reply}))
+    resp = make_response(jsonify({"reply": reply}))
     resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
     return resp
 
