@@ -476,24 +476,11 @@ def get_one_month(year, month, offset=0):
 
 def get_three_months():
     now = datetime.now()
-    
-    # Always show CURRENT month + next two
-    # → December → Dec / Jan / Feb
-    # → January  → Jan / Feb / Mar
-    # → July     → Jul / Aug / Sep
-    # → etc. forever    
-return [
-            get_one_month(now.year, now.month, -1),
-            get_one_month(now.year, now.month, 0),
-            get_one_month(now.year, now.month, 1),
-        ]
-    else:
-        return [
-            get_one_month(now.year, now.month, 0),
-            get_one_month(now.year, now.month, 1),
-            get_one_month(now.year, now.month, 2)
-        ]
-
+    return [
+        get_one_month(now.year, now.month, 0),   # current month (Dec → Jan → etc.)
+        get_one_month(now.year, now.month, 1),   # next month
+        get_one_month(now.year, now.month, 2)    # month after next
+    ]
 @app.context_processor
 def inject_calendar():
     return dict(calendar_months=get_three_months())
