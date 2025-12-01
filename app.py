@@ -429,17 +429,21 @@ def api_message():
             S["stage"] = "date"
             reply = "Great! Which date would you like?\nPlease use DD/MM/YYYY format (e.g. 15/01/2026)"
 
-    elif S["stage"] == "date":
+elif S["stage"] == "date":
         try:
             d = datetime.strptime(msg.strip(), "%d/%m/%Y")
             date_str = d.strftime("%Y-%m-%d")
 
-            if d.weekday() >= 5:  # weekend
+            # Block past dates
+            if is_past(date_str):
+                reply = "That date is in the past.\n\n" + find_next_available_days()
+            # Block weekends
+            elif d.weekday() >= 5:
                 reply = "We are closed on weekends.\n\n" + find_next_available_days(date_str)
-    elif is_past(date_str):
-    reply = "That date is in the past.\n\n" + find_next_available_days()
+            # Block holidays / closed periods
             elif is_date_blocked(date_str):
                 reply = "That date is not available (office closed or public holiday).\n\n" + find_next_available_days(date_str)
+            # Check if day is full
             else:
                 free = [t for t in TIME_SLOTS if not is_booked(date_str, t)]
                 if not free:
