@@ -143,9 +143,10 @@ function toggleDay(element) {
     </table>
     {% endif %}
 
-   <script>
+<script>
 function toggleDay(el) {
     const date = el.dataset.date;
+
     fetch('/admin/toggle_block', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -153,14 +154,19 @@ function toggleDay(el) {
     })
     .then(r => r.json())
     .then(data => {
-        el.classList.toggle('blocked');  // instantly flips red ↔ grey
+        // THIS IS THE MAGIC LINE — forces instant colour change without refresh
+        if (data.status === "blocked") {
+            el.style.background = '#e74c3c';
+            el.style.color = 'white';
+            el.style.border = '2px solid #c0392b';
+        } else {
+            el.style.background = '#f8f9fa';
+            el.style.color = '#333';
+            el.style.border = '2px solid #ddd';
+        }
     })
-    .catch(err => {
-        console.error(err);
-        alert('Error – please refresh and try again');
-    });
+    .catch(() => alert('Error – try again'));
 }
 </script>
-
 </body>
 </html>
