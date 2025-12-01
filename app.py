@@ -150,19 +150,33 @@ def get_calendar_month(year=None, month=None):
 
 
 def find_next_available_days(start_from=None):
-    if start_from is None:
-        start_from = datetime.now().strftime("%Y-%m-%d")
-    start = datetime.strptime(start_from, "%Y-%m-%d")
+    # ALWAYS start from TODAY — ignore anything in the past
+    today = datetime.now().date()
+    start = datetime.now()
+
+    # If user typed a date, just use it as a hint but never go backwards
+    if start_from:
+        try:
+            hint = datetime.strptime(start_from, "%Y-%m-%d").date()
+            if hint > today:
+                start = datetime.strptime(start_from, "%Y-%m-%d")
+        except:
+            pass  # ignore invalid format
+
     found = 0
     suggestions = []
-    
-    for i in range(1, 90):  # look max 3 months ahead
+
+    for i in range(0, 120):  # look up to 4 months ahead
         check = start + timedelta(days=i)
+        if check.date() < today:
+            continue  # skip any date before today
         if check.weekday() >= 5:  # skip weekends
             continue
+
         date_str = check.strftime("%Y-%m-%d")
         if is_date_blocked(date_str):
             continue
+
         free = [t for t in TIME_SLOTS if not is_booked(date_str, t)]
         if free:
             pretty = check.strftime("%A %d %B")
@@ -170,16 +184,17 @@ def find_next_available_days(start_from=None):
             found += 1
             if found >= 3:
                 break
-    
-    if suggestions:
-        return "Here are the next 3 available days with spots:\n\n" + "\n".join(suggestions) + "\n\nJust reply with your preferred date!"
-    else:
-        return "No availability in the next 3 months. Please check back later or contact us directly."
 
+    if suggestions:
+        return "Here are the next 3 available days:\n\n" + "\n".join(suggestions) + "\n\nJust reply with your preferred date!"
+    else:
+        return "No availability in the next 4 months. Please contact us directly."
 # Helper for past dates
 def is_past(date_str):
-    return datetime.strptime(date_str, "%Y-%m-%d").date() < datetime.now().date()
-
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d").date() < datetime.now().date()
+    except:
+        return False
 
 
 # ==================== EMAIL & TEAMS ====================
@@ -421,8 +436,8 @@ def api_message():
 
             if d.weekday() >= 5:  # weekend
                 reply = "We are closed on weekends.\n\n" + find_next_available_days(date_str)
-            elif is_past(date_str):
-                reply = "That date is in the past.\n\n" + find_next_available_days(date_str)
+    elif is_past(date_str):
+    reply = "That date is in the past.\n\n" + find_next_available_days()
             elif is_date_blocked(date_str):
                 reply = "That date is not available (office closed or public holiday).\n\n" + find_next_available_days(date_str)
             else:
