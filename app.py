@@ -481,16 +481,17 @@ def get_three_months():
     # → December → Dec / Jan / Feb
     # → January  → Jan / Feb / Mar
     # → July     → Jul / Aug / Sep
-    # → etc. forever
-    return [
-        get_one_month(now.year, now.month, 0),   # current month
-        get_one_month(now.year, now.month, 1),   # next month
-        get_one_month(now.year, now.month, 2)    # month after next
-    ]    else:
-        return [
+    # → etc. forever    
+return [
             get_one_month(now.year, now.month, -1),
             get_one_month(now.year, now.month, 0),
-            get_one_month(now.year, now.month, 1)
+            get_one_month(now.year, now.month, 1),
+        ]
+    else:
+        return [
+            get_one_month(now.year, now.month, 0),
+            get_one_month(now.year, now.month, 1),
+            get_one_month(now.year, now.month, 2)
         ]
 
 @app.context_processor
