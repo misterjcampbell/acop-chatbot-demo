@@ -1,4 +1,4 @@
-# FORCE REBUILD 2025-12-01
+# FINAL FIX 2025-12-01 — calendar toggle + blocking working
 # app.py - ACOP Booking Chatbot - FINAL WITH CLICKABLE CALENDAR BLOCKER
 from flask import (
     Flask, request, jsonify, render_template, redirect, url_for,
@@ -292,22 +292,28 @@ def admin_export():
     return response
 
 @app.route("/admin/toggle_block", methods=["POST"])
-@require_admin
 def toggle_block():
     data = request.get_json()
     date = data.get("date")
-    if date:
-        conn = sqlite3.connect(DB_FILE)
-        cur = conn.cursor()
-        cur.execute("SELECT 1 FROM blocked_dates WHERE date = ?", (date,))
-        if cur.fetchone():
-            conn.execute("DELETE FROM blocked_dates WHERE date = ?", (date,))
-        else:
-            conn.execute("INSERT INTO blocked_dates (date) VALUES (?)", (date,))
-        conn.commit()
-        conn.close()
-    return jsonify({"status": "ok"})
+    if not date:
+        return jsonify({"error": "no date"}), 400
 
+    # Check if this date is part of any existing blocked range
+    with sqlite3.connect(DB_FILE) as conn:
+        cur = conn.execute("SELECT start_date, end_date FROM blocked_ranges")
+        ranges = cur.fetchall()
+
+        for start, end in ranges:
+            if start <= date <= end:
+                # Date is already blocked → remove the whole range
+                conn.execute("DELETE FROM blocked_ranges WHERE start_date=? AND end_date=?", (start, end))
+                conn.commit()
+                return jsonify({"status": "unblocked"})
+
+        # Not blocked → block just this single day
+        conn.execute("INSERT INTO blocked_ranges (start_date, end_date) VALUES (?, ?)", (date, date))
+        conn.commit()
+        return jsonify({"status": "blocked"})
 @app.context_processor
 def inject_calendar():
     return dict(calendar_days=get_calendar_month())
@@ -477,10 +483,11 @@ def get_one_month(year, month, offset=0):
 def get_three_months():
     now = datetime.now()
     return [
-        get_one_month(now.year, now.month, 0),   # current month (Dec → Jan → etc.)
+        get_one_month(now.year, now.month, 0),   # current month
         get_one_month(now.year, now.month, 1),   # next month
         get_one_month(now.year, now.month, 2)    # month after next
     ]
+
 @app.context_processor
 def inject_calendar():
     return dict(calendar_months=get_three_months())
