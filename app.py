@@ -476,13 +476,17 @@ def get_one_month(year, month, offset=0):
 
 def get_three_months():
     now = datetime.now()
-    # Always show current month + next two (so in December → Dec/Jan/Feb)
+    
+    # Always show CURRENT month + next two
+    # → December → Dec / Jan / Feb
+    # → January  → Jan / Feb / Mar
+    # → July     → Jul / Aug / Sep
+    # → etc. forever
     return [
-        get_one_month(now.year, now.month, 0),   # December
-        get_one_month(now.year, now.month, 1),   # January
-        get_one_month(now.year, now.month, 2)    # February
-    ]
-    else:
+        get_one_month(now.year, now.month, 0),   # current month
+        get_one_month(now.year, now.month, 1),   # next month
+        get_one_month(now.year, now.month, 2)    # month after next
+    ]    else:
         return [
             get_one_month(now.year, now.month, -1),
             get_one_month(now.year, now.month, 0),
