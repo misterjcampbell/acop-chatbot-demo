@@ -194,12 +194,15 @@ def find_next_available_days(start_from=None):
     if suggestions:
         return "Here are the next 3 available days:\n\n" + "\n".join(suggestions) + "\n\nJust reply with your preferred date!"
     else:
-        return "No availability in the next few months. Please contact us directly."def is_past(date_str):
+        return "No availability in the next few months. Please contact us directly."
+
+
+# ←←← THIS BLANK LINE IS REQUIRED IN PYTHON ←←←
+def is_past(date_str):
     try:
         return datetime.strptime(date_str, "%Y-%m-%d").date() < datetime.now().date()
     except:
         return False
-
 
 # ==================== EMAIL & TEAMS ====================
 def send_email(to, subject, text, html=None, attachments=None):
