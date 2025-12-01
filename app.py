@@ -13,18 +13,35 @@ TIME_SLOTS = ["09:00", "11:00", "15:30"]
 
 # ==================== DATABASE HELPERS ====================
 def init_db():
-    with sqlite3.connect(DB_FILE) as conn:
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS bookings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT, email TEXT, phone TEXT, date TEXT, time TEXT, created_at TEXT
-            );
-            CREATE TABLE IF NOT EXISTS blocked_ranges (
-                id INTEGER PRIMARY KEY,
-                start_date TEXT,
-                end_date TEXT
-            );
-        """)
+    conn = sqlite3.connect(DB_FILE)
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS bookings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            email TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            date TEXT NOT NULL,
+            time TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS admin_settings (
+            id INTEGER PRIMARY KEY,
+            email_per_booking INTEGER DEFAULT 1,
+            attach_csv INTEGER DEFAULT 1,
+            teams_enabled INTEGER DEFAULT 1,
+            teams_webhook TEXT DEFAULT ''
+        );
+        CREATE TABLE IF NOT EXISTS blocked_ranges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL
+        );
+        INSERT OR IGNORE INTO admin_settings (id) VALUES (1);
+    """)
+    conn.commit()
+    conn.close()
+init_db()
+
 
 def is_date_blocked(date_str):
     with sqlite3.connect(DB_FILE) as conn:
@@ -107,6 +124,37 @@ def toggle_block():
     add_blocked_range(date, date)
     return jsonify({"status": "blocked"})
 
+@app.route("/admin/settings", methods=["GET", "POST"])
+@require_admin
+def admin_settings():
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("SELECT email_per_booking, attach_csv, teams_enabled, teams_webhook FROM admin_settings WHERE id=1")
+    row = cur.fetchone()
+    if not row:
+        row = (1, 1, 1, "")
+
+    if request.method == "POST":
+        email_on = 1 if request.form.get("email_per_booking") else 0
+        csv_on = 1 if request.form.get("attach_csv") else 0
+        teams_on = 1 if request.form.get("teams_enabled") else 0
+        webhook = request.form.get("teams_webhook", "").strip()
+
+        conn.execute("""UPDATE admin_settings SET 
+                     email_per_booking=?, attach_csv=?, teams_enabled=?, teams_webhook=?
+                     WHERE id=1""", (email_on, csv_on, teams_on, webhook))
+        conn.commit()
+        flash("Settings saved!")
+        # Update global webhook
+        global TEAMS_WEBHOOK
+        TEAMS_WEBHOOK = webhook if teams_on else ""
+
+    conn.close()
+    return render_template("admin_settings.html",
+                         email_per_booking=row[0],
+                         attach_csv=row[1],
+                         teams_enabled=row[2],
+                         teams_webhook=row[3])
 # ==================== CHATBOT (only the essentials) ====================
 @app.route("/api/message", methods=["POST"])
 def api_message():
