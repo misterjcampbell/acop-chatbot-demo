@@ -81,29 +81,38 @@
         Red = blocked · Grey = available · Click to toggle instantly
     </p>
 </div>
-
 <script>
 function toggleDay(element) {
     const date = element.dataset.date;
+
     fetch('/admin/toggle_block', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'  // optional, helps backend detect AJAX
+        },
         body: JSON.stringify({date: date})
     })
-    .then(() => {
-        // Flip colour instantly (no reload)
-        const isBlocked = element.style.backgroundColor === 'rgb(231, 76, 60)'; // #e74c3c
-        if (isBlocked) {
+    .then(response => {
+        if (!response.ok) throw new Error('Network error');
+        // Toggle the visual state
+        const currentlyBlocked = element.classList.contains('blocked');
+        if (currentlyBlocked) {
+            element.classList.remove('blocked');
             element.style.background = '#f8f9fa';
             element.style.color = '#333';
             element.style.border = '2px solid #ddd';
         } else {
+            element.classList.add('blocked');
             element.style.background = '#e74c3c';
             element.style.color = 'white';
             element.style.border = '2px solid #c0392b';
         }
     })
-    .catch(() => alert('Error – try again'));
+    .catch(err => {
+        console.error(err);
+        alert('Failed to update – please try again');
+    });
 }
 </script>
     <!-- BOOKINGS TABLE -->
