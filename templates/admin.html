@@ -1,0 +1,153 @@
+<!-- FORCE TEMPLATE RELOAD 2025-12-01 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACOP Bookings Admin</title>
+    <style>
+        body {font-family: 'Segoe UI', sans-serif; margin:40px; background:#f5f7fa; color:#333}
+        h1 {color:#004cbf; text-align:center;}
+        .topbar {text-align:center; margin:20px 0; font-size:18px;}
+        .topbar a {margin:0 15px; color:#0098ea; text-decoration:none;}
+        .topbar a:hover {text-decoration:underline;}
+        .calendar-container {margin:30px auto; max-width:1200px;}
+        .calendar {background:white; padding:20px; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.1); margin-bottom:40px;}
+        .month {text-align:center; font-size:22px; font-weight:bold; margin-bottom:12px; color:#004cbf;}
+        .days {display:grid; grid-template-columns:repeat(7,1fr); gap:6px; text-align:center;}
+        .day-header {font-weight:bold; padding:10px; background:#eef;}
+        .day {padding:14px 4px; cursor:pointer; border-radius:8px; transition:0.2s; border:2px solid #ddd;}
+        .day.blocked {background:#e74c3c; color:white; border-color:#c0392b;}
+        .day:hover {transform:scale(1.08);}
+        .day.empty {visibility:hidden;}
+        table {width:100%; border-collapse:collapse; background:white; box-shadow:0 4px 15px rgba(0,0,0,0.1); margin-top:30px;}
+        th {background:#004cbf; color:white; padding:14px;}
+        td {padding:12px; border-bottom:1px solid #ddd; text-align:left;}
+        tr:nth-child(even) {background:#f8fbff;}
+        .del {background:#d9534f; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;}
+        .empty {text-align:center; color:#888; font-style:italic; padding:40px;}
+        .back {text-align:center; margin:30px;}
+    </style>
+</head>
+<body>
+
+    <h1>ACOP Bookings Admin</h1>
+    <div class="topbar">
+        <a href="/admin/settings">Settings</a> |
+        <a href="/admin/export">Export CSV</a> |
+        <a href="/admin/logout">Logout</a>
+    </div>
+    <hr>
+
+<!-- FINAL CALENDAR – WORKS WITH YOUR RANGE-BASED BLOCKING + INSTANT TOGGLE -->
+<div style="margin:40px 0;">
+    <h2 style="text-align:center; color:#004cbf; margin-bottom:20px; font-size:20px;">
+        Block/Unblock Days — Click any day (red = blocked)
+    </h2>
+
+    <div style="display:flex; gap:25px; justify-content:center; flex-wrap:wrap; padding:10px; overflow-x:auto;">
+        {% for month in calendar_months %}
+        <div style="background:#fff; border-radius:14px; padding:18px; box-shadow:0 8px 25px rgba(0,0,0,0.12); min-width:310px;">
+            <div style="text-align:center; font-weight:bold; color:#004cbf; margin-bottom:14px; font-size:18px;">
+                {{ month.name }}
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:7px; text-align:center;">
+                <div style="font-weight:bold; color:#555; font-size:13px;">M</div>
+                <div style="font-weight:bold; color:#555; font-size:13px;">T</div>
+                <div style="font-weight:bold; color:#555; font-size:13px;">W</div>
+                <div style="font-weight:bold; color:#555; font-size:13px;">T</div>
+                <div style="font-weight:bold; color:#555; font-size:13px;">F</div>
+                <div style="font-weight:bold; color:#555; font-size:13px;">S</div>
+                <div style="font-weight:bold; color:#555; font-size:13px;">S</div>
+
+                {% for day in month.days %}
+                    {% if day.num %}
+                        <div class="cal-day"
+                             data-date="{{ day.date }}"
+                             style="padding:11px 6px; border-radius:9px; cursor:pointer; font-weight:600; font-size:14px;
+                                    background:{{ '#e74c3c' if day.blocked else '#f8f9fa' }};
+                                    color:{{ 'white' if day.blocked else '#333' }};
+                                    border:2px solid {{ '#c0392b' if day.blocked else '#ddd' }};">
+                            {{ day.num }}
+                        </div>
+                    {% else %}
+                        <div></div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <p style="text-align:center; margin-top:25px; color:#666; font-size:15px;">
+        Red = blocked · Grey = available · Click any day to toggle instantly
+    </p>
+</div>
+
+<script>
+// Instant toggle — works perfectly with your range-based backend
+document.querySelectorAll('.cal-day').forEach(cell => {
+    cell.addEventListener('click', function() {
+        const date = this.dataset.date;
+        fetch('/admin/toggle_block', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: date })
+        })
+        .then(() => {
+            // Flip colour instantly
+            const isBlocked = this.style.backgroundColor === 'rgb(231, 76, 60)'; // #e74c3c
+            if (isBlocked) {
+                this.style.background = '#f8f9fa';
+                this.style.color = '#333';
+                this.style.border = '2px solid #ddd';
+            } else {
+                this.style.background = '#e74c3c';
+                this.style.color = 'white';
+                this.style.border = '2px solid #c0392b';
+            }
+        })
+        .catch(() => alert('Error – try again'));
+    });
+});
+</script>
+    <!-- BOOKINGS TABLE -->
+    <h2 style="text-align:center; color:#004cbf;">Current Bookings</h2>
+    {% if bookings|length == 0 %}
+        <p class="empty">No bookings yet.</p>
+    {% else %}
+    <table>
+        <tr>
+            <th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Date</th><th>Time</th><th>Action</th>
+        </tr>
+        {% for b in bookings %}
+        <tr>
+            <td>{{ b[0] }}</td>
+            <td>{{ b[1] }}</td>
+            <td>{{ b[2] }}</td>
+            <td>{{ b[3] }}</td>
+            <td>{{ b[4]|replace('-','/') }}</td>
+            <td>{{ b[5] }}</td>
+            <td>
+                <form method="POST" action="/admin/delete/{{ b[0] }}" style="display:inline"
+                      onsubmit="return confirm('Delete this booking?');">
+                    <button type="submit" class="del">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+
+    <script>
+        function toggleDay(date) {
+            fetch('/admin/toggle_block', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({date: date})
+            }).then(() => location.reload());
+        }
+    </script>
+
+</body>
+</html>
