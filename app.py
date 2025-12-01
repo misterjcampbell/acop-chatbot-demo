@@ -12,9 +12,11 @@ from email.message import EmailMessage
 import csv
 import io
 import uuid
-from datetime import datetime, timedelta
-import requests
+from datetime import datetime
+from datetime import timedelta
 import pytz
+
+SYDNEY_TZ = pytz.timezone("Australia/Sydney")
 from icalendar import Calendar, Event
 from functools import wraps
 
@@ -74,19 +76,19 @@ init_db()
 
 # ==================== DB HELPERS ====================
 def is_slot_past_today(date_str, time_slot):
-    """Block slots that are already passed today (e.g. 09:00 at 23:59)"""
     try:
-        now = datetime.now()
+        now = datetime.now(SYDNEY_TZ)
         slot_dt = datetime.strptime(f"{date_str} {time_slot}", "%Y-%m-%d %H:%M")
+        slot_dt = SYDNEY_TZ.localize(slot_dt)
         return slot_dt < now
     except:
-        return True  # Assume invalid = blocked
+        return True
 def is_same_day_cutoff_passed(date_str, time_slot):
-    """Block same-day bookings if less than 2 hours notice"""
     try:
-        now = datetime.now()
+        now = datetime.now(SYDNEY_TZ)
         booking_dt = datetime.strptime(f"{date_str} {time_slot}", "%Y-%m-%d %H:%M")
-        if booking_dt.date() == now.date():  # it's today
+        booking_dt = SYDNEY_TZ.localize(booking_dt)  # make it timezone-aware
+        if booking_dt.date() == now.date():
             cutoff = now + timedelta(hours=2)
             return booking_dt < cutoff
         return False
@@ -169,9 +171,9 @@ def get_calendar_month(year=None, month=None):
 
 
 def find_next_available_days(start_from=None):
-    now = datetime.now()
-    tomorrow = now.date() + timedelta(days=1)
-    start = datetime.combine(tomorrow, datetime.min.time())  # Start from tomorrow morning
+    now = datetime.now(SYDNEY_TZ)
+    tomorrow = (now + timedelta(days=1)).date()
+    start = datetime.combine(tomorrow, datetime.min.time())
 
     found = 0
     suggestions = []
@@ -200,7 +202,7 @@ def find_next_available_days(start_from=None):
 # ←←← THIS BLANK LINE IS REQUIRED IN PYTHON ←←←
 def is_past(date_str):
     try:
-        return datetime.strptime(date_str, "%Y-%m-%d").date() < datetime.now().date()
+        return datetime.strptime(date_str, "%Y-%m-%d").date() < datetime.now(SYDNEY_TZ).date()
     except:
         return False
 
