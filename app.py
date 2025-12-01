@@ -463,31 +463,34 @@ def api_message():
 
     elif S["stage"] == "time":
         t = msg.strip().upper().replace(" ", "").replace(".", "")
-        # Normalise common inputs
-        if t in ["9", "9AM", "900"]:
-            t = "09:00"
-        elif t in ["11", "11AM", "1100"]:
-            t = "11:00"
-        elif t in ["330", "3:30", "1530", "15:30"]:
-            t = "15:30"
+        if t in ["9", "9AM", "900"]: t = "09:00"
+        elif t in ["11", "11AM", "1100"]: t = "11:00"
+        elif t in ["330", "3:30", "1530", "15:30"]: t = "15:30"
 
-        if t not in TIME_SLOTS:
-            reply = f"Please choose from: {', '.join(TIME_SLOTS)}"
-        elif is_booked(S["date"], t):
-            reply = "That time was just taken. Please choose another."
-        elif is_same_day_cutoff_passed(S["date"], t):
-            reply = f"Sorry, bookings for {t} today require at least 2 hours notice.\nPlease choose a later time or another day."
-        elif is_slot_past_today(S["date"], t):
-            reply = "That time has already passed.\n\n" + find_next_available_days()
+        # Re-create the date object (needed for past-time check)
+        try:
+            date_obj = datetime.strptime(S["date"], "%Y-%m-%d")
+            nice_date = date_obj.strftime("%d %B %Y")
+        except:
+            reply = "Error with date. Please start again."
+            S["stage"] = "date"
         else:
-            # SUCCESS — book it
-            bid = save_booking(S["name"], S["email"], S["phone"], S["date"], t)
-            send_confirmation(S["name"], S["email"], S["phone"], S["date"], t)
-            notify_admin(all_bookings()[-1])
-            nice = datetime.strptime(S["date"], "%Y-%m-%d").strftime("%d %B %Y")
-            reply = f"Confirmed! Your call is on {nice} at {t}\n\nType 'cancel' to change."
-            app.chat_sessions.pop(sid, None)        
-        resp = make_response(jsonify({"reply": reply}))
+            if t not in TIME_SLOTS:
+                reply = f"Please choose from: {', '.join(TIME_SLOTS)}"
+            elif is_booked(S["date"], t):
+                reply = "That time was just taken. Please choose another."
+            elif is_same_day_cutoff_passed(S["date"], t):
+                reply = f"Sorry, bookings for {t} today require at least 2 hours notice.\nPlease choose a later time or another day."
+            elif is_slot_past_today(S["date"], t):
+                reply = f"The {t} slot on {nice_date} has already passed.\n\n" + find_next_available_days()
+            else:
+                # SUCCESS — book it
+                bid = save_booking(S["name"], S["email"], S["phone"], S["date"], t)
+                send_confirmation(S["name"], S["email"], S["phone"], S["date"], t)
+                notify_admin(all_bookings()[-1])
+                reply = f"Confirmed! Your call is on {nice_date} at {t}\n\nType 'cancel' to change."
+                app.chat_sessions.pop(sid, None)
+                resp = make_response(jsonify({"reply": reply}))
     resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
     return resp
 
