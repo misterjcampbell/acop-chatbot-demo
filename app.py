@@ -36,7 +36,6 @@ SMTP_USER = os.getenv("SMTP_USER", "17d873b3a11a38")
 SMTP_PASS = os.getenv("SMTP_PASS", "453b9c740a0729")
 FROM_EMAIL = os.getenv("FROM_EMAIL", "enquiries@acop.edu.au")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "johnc@acop.edu.au")
-TEAMS_WEBHOOK = os.getenv("TEAMS_WEBHOOK", "")
 
 ADMIN_USER = os.getenv("ADMIN_USER", "Admin")
 ADMIN_PASS = os.getenv("ADMIN_PASS", "Acop2025!")
@@ -266,20 +265,25 @@ def send_confirmation(name, email, phone, date, time):
                [("ACOP-Call.ics", cal.to_ical(), "ics")])
 
 def notify_admin(booking_row):
+    """
+    booking_row = (id, name, email, phone, date, time, created_at_iso)
+    """
     booking_id, name, email, phone, date, time, created_at = booking_row
-    
-    pretty_date = datetime.strptime(date, "%Y-%m-%d").strftime("%d %B %Y")
-    booked_at = datetime.fromisoformat(created_at.replace("Z", "+00:00")).astimezone(SYDNEY_TZ).strftime("%d %B %Y %I:%M %p")
 
-    # === EMAIL WITH CSV ===
+    pretty_date = datetime.strptime(date, "%Y-%m-%d").strftime("%d %B %Y")
+    booked_at = datetime.fromisoformat(created_at.replace("Z", "+00:00") if "Z" in created_at else created_at) \
+                     .astimezone(SYDNEY_TZ).strftime("%d %B %Y %I:%M %p")
+
+    # === ADMIN EMAIL WITH CSV (unchanged logic) ===
     csv_output = io.StringIO()
     writer = csv.writer(csv_output)
     writer.writerow(["ID", "Name", "Email", "Phone", "Date", "Time", "Booked At"])
     writer.writerow([booking_id, name, email, phone, date, time, booked_at])
-    
+
     html = f"<h3>New Booking</h3><p><strong>{name}</strong><br>{email}<br>{phone}<br><strong>{pretty_date} at {time}</strong></p>"
     text = f"New booking: {name} | {email} | {phone} | {pretty_date} {time}"
-    
+
+    # Email is fire-and-forget — we don't block on it
     send_email(
         to=ADMIN_EMAIL,
         subject=f"New Booking: {name} – {pretty_date} {time}",
@@ -288,20 +292,34 @@ def notify_admin(booking_row):
         attachments=[("booking.csv", csv_output.getvalue().encode(), "csv")]
     )
 
-    # === TEAMS NOTIFICATION – 100% ROBUST ===
+    # === TEAMS NOTIFICATION – NOW BULLETPROOF ===
     try:
         with sqlite3.connect(DB_FILE) as conn:
             conn.row_factory = sqlite3.Row
             cur = conn.execute("SELECT teams_enabled, teams_webhook FROM admin_settings WHERE id = 1")
-            row = cur.fetchone()
-            
-            if row and row["teams_enabled"] and row["teams_webhook"]:
-                url = row["teams_webhook"].strip()
-                if url:
-                    payload = {"text": f"New ACOP Booking\n**{name}**\n{email} | {phone}\n**{pretty_date} at {time}**"}
-                    requests.post(url, json=payload, timeout=10)
+            settings = cur.fetchone()
+
+        if settings and settings["teams_enabled"] and settings["teams_webhook"]:
+            url = settings["teams_webhook"].strip()
+            if not url:
+                return
+
+            payload = {
+                "@type": "MessageCard",
+                "@context": "http://schema.org/extensions",
+                "themeColor": "0072C6",
+                "title": "New ACOP Booking",
+                "text": f"**{name}**  \n{email} | {phone}  \n**{pretty_date} at {time}**  \nBooked at {booked_at}"
+            }
+
+            response = requests.post(url, json=payload, timeout=10)
+            if response.status_code != 200:
+                print(f"TEAMS WEBHOOK FAILED — HTTP {response.status_code}: {response.text}")
+            # else: success → silent (no spam in logs)
+
     except Exception as e:
-        print(f"TEAMS FAILED (ignored): {e}")
+        print(f"TEAMS NOTIFICATION ERROR: {e}")
+        # Optional: send yourself an email if Teams keeps failing, etc.
 # ==================== ADMIN ROUTES ====================
 def require_admin(fn):
     @wraps(fn)
@@ -403,10 +421,7 @@ def admin_settings():
                      WHERE id=1""", (email_on, csv_on, teams_on, webhook))
         conn.commit()
         flash("Settings saved!")
-        # Update global webhook
-        global TEAMS_WEBHOOK
-        TEAMS_WEBHOOK = webhook if teams_on else ""
-
+       
     conn.close()
     return render_template("admin_settings.html",
                          email_per_booking=row[0],
@@ -424,11 +439,19 @@ def test_email():
 @app.route("/admin/test_teams", methods=["POST"])
 @require_admin
 def test_teams():
-    webhook = request.form.get("teams_webhook") or TEAMS_WEBHOOK
-    if webhook:
-        requests.post(webhook, json={"text": "ACOP Test Message – Teams is connected!"}, timeout=5)
-    return "sent"
+    webhook = request.form.get("teams_webhook", "").strip()
+    if not webhook:
+        return "No webhook URL provided", 400
 
+    try:
+        resp = requests.post(webhook, json={"text": "ACOP Teams Test — Connection successful!"}, timeout=8)
+        if resp.status_code == 200:
+            flash("Teams test message sent successfully!", "success")
+        else:
+            flash(f"Teams returned {resp.status_code}: {resp.text}", "error")
+    except Exception as e:
+        flash(f"Teams test failed: {e}", "error")
+    return redirect(url_for("admin_settings"))
 # ==================== CHATBOT ====================
 @app.route("/")
 def index():
@@ -525,17 +548,14 @@ def api_message():
                 reply = f"The {t} slot on {nice_date} has already passed.\n\n" + find_next_available_days()
             else:
                 # SUCCESS — book it
-booking_row = (
-    bid,
-    S["name"],
-    S["email"],
-    S["phone"],
-    S["date"],
-    t,
-    datetime.now(LOCAL_TZ).isoformat()
-)
-send_confirmation(S["name"], S["name"], S["email"], S["phone"], S["date"], t)
-notify_admin(booking_row)  # ← now 100% accurate
+bid = save_booking(S["name"], S["email"], S["phone"], S["date"], t)
+
+# Create the exact row that notify_admin expects
+created_at = datetime.now(LOCAL_TZ).isoformat()
+booking_row = (bid, S["name"], S["email"], S["phone"], S["date"], t, created_at)
+
+send_confirmation(S["name"], S["email"], S["phone"], S["date"], t)
+notify_admin(booking_row)        # ← now 100% accurate and fast
                 reply = f"Confirmed! Your call is on {nice_date} at {t}\n\nType 'cancel' to change."
                 app.chat_sessions.pop(sid, None)
     resp = make_response(jsonify({"reply": reply}))
