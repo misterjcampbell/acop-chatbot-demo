@@ -265,24 +265,58 @@ def send_confirmation(name, email, phone, date, time):
                [("ACOP-Call.ics", cal.to_ical(), "ics")])
 
 def notify_admin(booking_row):
-    name, email, phone, date, time = booking_row[1:6]
-    pretty = datetime.strptime(date, "%Y-%m-%d").strftime("%d %B %Y")
-    text = f"New booking:\nName: {name}\nEmail: {email}\nPhone: {phone}\nDate: {pretty}\nTime: {time}"
-    html = f"<h3>New Booking</h3><p><strong>{name}</strong><br>{email}<br>{phone}<br>{pretty} at {time}</p>"
+    # booking_row = (id, name, email, phone, date, time, created_at)
+    booking_id, name, email, phone, date, time, created_at = booking_row
+    
+    pretty_date = datetime.strptime(date, "%Y-%m-%d").strftime("%d %B %Y")
+    pretty_created = datetime.fromisoformat(created_at.replace("Z", "+00:00")).astimezone(SYDNEY_TZ).strftime("%d %B %Y, %I:%M %p")
 
-    attachments = []
-    csv_data = io.StringIO()
-    writer = csv.writer(csv_data)
-    writer.writerow(["ID","Name","Email","Phone","Date","Time","Created"])
-    writer.writerow(booking_row)
-    attachments.append(("booking.csv", csv_data.getvalue().encode(), "csv"))
+    text = f"New booking:\nName: {name}\nEmail: {email}\nPhone: {phone}\nDate: {pretty_date}\nTime: {time}\nBooked: {pretty_created}"
+    html = f"""
+    <h3>New Booking Received</h3>
+    <p><strong>{name}</strong><br>
+    {email}<br>
+    {phone}<br>
+    <strong>{pretty_date} at {time}</strong><br>
+    Booked: {pretty_created}</p>
+    """
 
-    send_email(ADMIN_EMAIL, f"New Booking: {name} - {pretty} {time}", text, html, attachments)
+    # Build clean CSV
+    csv_output = io.StringIO()
+    writer = csv.writer(csv_output)
+    writer.writerow(["ID", "Name", "Email", "Phone", "Date", "Time", "Booked At"])
+    writer.writerow([booking_id, name, email, phone, date, time, pretty_created])
+    
+    attachments = [
+        ("booking.csv", csv_output.getvalue().encode('utf-8'), "csv")
+    ]
 
-    webhook = TEAMS_WEBHOOK
-    if webhook:
-        requests.post(webhook, json={"text": f"New ACOP Booking\n{name}\n{email}\n{phone}\n{pretty} {time}"}, timeout=5)
+    send_email(
+        to=ADMIN_EMAIL,
+        subject=f"New Booking: {name} – {pretty_date} {time}",
+        text=text,
+        html=html,
+        attachments=attachments
+    )
 
+ # === TEAMS NOTIFICATION (works with new Workflows URLs) ===
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cur = conn.cursor()
+        cur.execute("SELECT teams_enabled, teams_webhook FROM admin_settings WHERE id=1")
+        row = cur.fetchone()
+        conn.close()
+
+        if row and row[0] and row[1]:
+            url = row[1].strip()
+            if url:
+                requests.post(
+                    url,
+                    json={"text": f"**New ACOP Booking**\n{name}\n{email} | {phone}\n**{pretty_date} at {time}**"},
+                    timeout=10
+                )
+    except Exception as e:
+        print(f"Teams failed (will retry next booking): {e}")
 # ==================== ADMIN ROUTES ====================
 def require_admin(fn):
     @wraps(fn)
