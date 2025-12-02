@@ -299,8 +299,7 @@ def notify_admin(booking_row):
         attachments=attachments
     )
 
-    # Teams notification (if enabled)
-      # === TEAMS NOTIFICATION – reads live from database ===
+ # === TEAMS NOTIFICATION (works with new Workflows URLs) ===
     try:
         conn = sqlite3.connect(DB_FILE)
         cur = conn.cursor()
@@ -308,15 +307,16 @@ def notify_admin(booking_row):
         row = cur.fetchone()
         conn.close()
 
-        if row:
-            enabled, live_webhook = row
-            if enabled and live_webhook and live_webhook.strip():
-                payload = {
-                    "text": f"**New ACOP Booking**\n{name}\n{email} | {phone}\n**{pretty_date} at {time}**"
-                }
-                requests.post(live_webhook.strip(), json=payload, timeout=10)
+        if row and row[0] and row[1]:
+            url = row[1].strip()
+            if url:
+                requests.post(
+                    url,
+                    json={"text": f"**New ACOP Booking**\n{name}\n{email} | {phone}\n**{pretty_date} at {time}**"},
+                    timeout=10
+                )
     except Exception as e:
-        print(f"Teams notification failed: {e}")
+        print(f"Teams failed (will retry next booking): {e}")
 # ==================== ADMIN ROUTES ====================
 def require_admin(fn):
     @wraps(fn)
