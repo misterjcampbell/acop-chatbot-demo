@@ -300,23 +300,23 @@ def notify_admin(booking_row):
     )
 
     # Teams notification (if enabled)
-    if TEAMS_WEBHOOK:
-           # === TEAMS NOTIFICATION – now reads live from database ===
+      # === TEAMS NOTIFICATION – reads live from database ===
     try:
         conn = sqlite3.connect(DB_FILE)
         cur = conn.cursor()
         cur.execute("SELECT teams_enabled, teams_webhook FROM admin_settings WHERE id=1")
-        enabled, live_webhook = cur.fetchone()
+        row = cur.fetchone()
         conn.close()
 
-        if enabled and live_webhook and live_webhook.strip():
-            payload = {
-                "text": f"**New ACOP Booking**\n{name}\n{email} | {phone}\n**{pretty_date} at {time}**"
-            }
-            requests.post(live_webhook.strip(), json=payload, timeout=10)
+        if row:
+            enabled, live_webhook = row
+            if enabled and live_webhook and live_webhook.strip():
+                payload = {
+                    "text": f"**New ACOP Booking**\n{name}\n{email} | {phone}\n**{pretty_date} at {time}**"
+                }
+                requests.post(live_webhook.strip(), json=payload, timeout=10)
     except Exception as e:
-        print(f"Teams notification failed: {e}")  # visible in Render logs
-
+        print(f"Teams notification failed: {e}")
 # ==================== ADMIN ROUTES ====================
 def require_admin(fn):
     @wraps(fn)
