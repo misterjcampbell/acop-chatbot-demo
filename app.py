@@ -15,6 +15,7 @@ import uuid
 from datetime import datetime
 from datetime import timedelta
 import pytz
+import requests
 
 SYDNEY_TZ = pytz.timezone("Australia/Sydney")
 from icalendar import Calendar, Event
@@ -524,9 +525,17 @@ def api_message():
                 reply = f"The {t} slot on {nice_date} has already passed.\n\n" + find_next_available_days()
             else:
                 # SUCCESS — book it
-                bid = save_booking(S["name"], S["email"], S["phone"], S["date"], t)
-                send_confirmation(S["name"], S["email"], S["phone"], S["date"], t)
-                notify_admin(all_bookings()[-1])
+booking_row = (
+    bid,
+    S["name"],
+    S["email"],
+    S["phone"],
+    S["date"],
+    t,
+    datetime.now(LOCAL_TZ).isoformat()
+)
+send_confirmation(S["name"], S["name"], S["email"], S["phone"], S["date"], t)
+notify_admin(booking_row)  # ← now 100% accurate
                 reply = f"Confirmed! Your call is on {nice_date} at {t}\n\nType 'cancel' to change."
                 app.chat_sessions.pop(sid, None)
     resp = make_response(jsonify({"reply": reply}))
