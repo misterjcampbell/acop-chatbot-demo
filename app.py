@@ -172,32 +172,51 @@ def get_calendar_month(year=None, month=None):
 
 def find_next_available_days(start_from=None):
     now = datetime.now(SYDNEY_TZ)
-    tomorrow = (now + timedelta(days=1)).date()
-    start = datetime.combine(tomorrow, datetime.min.time())
+    today = now.date()
+
+    # Decide where to start searching from
+    if start_from:
+        try:
+            # User typed a date → start searching FROM THAT DATE (even if it's in the future)
+            search_start_date = datetime.strptime(start_from, "%Y-%m-%d").date()
+        except:
+            search_start_date = today
+    else:
+        search_start_date = today
+
+    # But never go backwards — if somehow the hint is in the past, start from today
+    search_start_date = max(search_start_date, today)
 
     found = 0
     suggestions = []
-    
-    for i in range(0, 120):
-        check = start + timedelta(days=i)
-        if check.weekday() >= 5:  # skip weekends
+    current = datetime.combine(search_start_date, datetime.min.time())
+
+    for i in range(0, 200):  # look up to ~6 months ahead
+        check_date = current + timedelta(days=i)
+        if check_date.weekday() >= 5:  # skip weekends
             continue
-        date_str = check.strftime("%Y-%m-%d")
+
+        date_str = check_date.strftime("%Y-%m-%d")
         if is_date_blocked(date_str):
             continue
-        free = [t for t in TIME_SLOTS if not is_booked(date_str, t)]
+
+        # Check each time slot isn't already passed
+        free = []
+        for t in TIME_SLOTS:
+            if not is_booked(date_str, t) and not is_slot_past_today(date_str, t):
+                free.append(t)
+
         if free:
-            pretty = check.strftime("%A %d %B")
+            pretty = check_date.strftime("%A %d %B")
             suggestions.append(f"• {pretty} – {', '.join(free)}")
             found += 1
             if found >= 3:
                 break
-    
+
     if suggestions:
         return "Here are the next 3 available days:\n\n" + "\n".join(suggestions) + "\n\nJust reply with your preferred date!"
     else:
-        return "No availability in the next few months. Please contact us directly."
-
+        return "No availability found. Please try a different date or contact us directly."
 
 # ←←← THIS BLANK LINE IS REQUIRED IN PYTHON ←←←
 def is_past(date_str):
