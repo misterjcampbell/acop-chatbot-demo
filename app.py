@@ -15,7 +15,6 @@ import uuid
 from datetime import datetime
 from datetime import timedelta
 import pytz
-import requests
 
 SYDNEY_TZ = pytz.timezone("Australia/Sydney")
 from icalendar import Calendar, Event
@@ -317,9 +316,7 @@ def notify_admin(booking_row):
                 }
                 requests.post(live_webhook.strip(), json=payload, timeout=10)
     except Exception as e:
-import traceback
-print("Teams notification failed:", e)
-traceback.print_exc()
+        print(f"Teams notification failed: {e}")
 # ==================== ADMIN ROUTES ====================
 def require_admin(fn):
     @wraps(fn)
