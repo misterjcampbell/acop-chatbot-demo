@@ -244,58 +244,75 @@ def toggle_block():
 def api_message():
     data = request.get_json() or {}
     msg = data.get("message", "").strip()
-    sid = data.get("session_id") or str(uuid.uuid4())
-    S = app.chat_sessions.setdefault(sid, {"stage": "start"})
+    sid = request.cookies.get("sid") or str(uuid.uuid4())
+
+    # Always get fresh session
+    if sid not in app.chat_sessions:
+        app.chat_sessions[sid] = {"stage": "start"}
+
+    S = app.chat_sessions[sid]
     reply = ""
 
-    # Flow logic here (kept clean and working)
     if S["stage"] == "start":
         reply = "Hi! I'm here to help you book your assessment call.\n\nWhat's your name?"
         S["stage"] = "name"
+
     elif S["stage"] == "name":
-        S["name"] = msg; reply = f"Thanks {msg}! What's your email?"; S["stage"] = "email"
+        S["name"] = msg.strip()
+        reply = f"Thanks {S['name']}! What's your email?"
+        S["stage"] = "email"
+
     elif S["stage"] == "email":
-        S["email"] = msg; reply = "Your phone number?"; S["stage"] = "phone"
+        S["email"] = msg.strip().lower()
+        reply = "Your phone number?"
+        S["stage"] = "phone"
+
     elif S["stage"] == "phone":
-        S["phone"] = msg; reply = "Great! Which date? (DD/MM/YYYY)"; S["stage"] = "date"
+        S["phone"] = msg.strip()
+        reply = "Great! Which date would you like?\nPlease use DD/MM/YYYY format (e.g. 15/01/2026)"
+        S["stage"] = "date"
+
     elif S["stage"] == "date":
         try:
-            d = datetime.strptime(msg, "%d/%m/%Y")
+            d = datetime.strptime(msg.strip(), "%d/%m/%Y")
             date_str = d.strftime("%Y-%m-%d")
+
             if is_past(date_str):
                 reply = "That date is in the past.\n\n" + find_next_available_days()
             elif d.weekday() >= 5:
                 reply = "We are closed on weekends.\n\n" + find_next_available_days(date_str)
             elif is_date_blocked(date_str):
-                reply = "That date is not available.\n\n" + find_next_available_days(date_str)
+                reply = "That date is not available (office closed or public holiday).\n\n" + find_next_available_days(date_str)
             else:
                 free = [t for t in TIME_SLOTS if not is_booked(date_str, t) and not is_slot_past_today(date_str, t)]
                 if not free:
-                    reply = "That day is full.\n\n" + find_next_available_days(date_str)
+                    reply = "That day is fully booked.\n\n" + find_next_available_days(date_str)
                 else:
                     S["date"] = date_str
                     S["stage"] = "time"
                     reply = f"Available on {d.strftime('%d %B %Y')}:\n" + ", ".join(free)
-        except:
-            reply = "Please use DD/MM/YYYY format"
+        except ValueError:
+            reply = "Please enter the date in DD/MM/YYYY format (e.g. 15/01/2026)"
+
     elif S["stage"] == "time":
         t = msg.strip().upper().replace(".", "").replace(" ", "")
-        norm = {"9":"09:00","11":"11:00","330":"15:30","1530":"15:30","3:30":"15:30","15:30":"15:30"}
+        norm = {"9": "09:00", "11": "11:00", "330": "15:30", "1530": "15:30", "3:30": "15:30"}
         t = norm.get(t, t)
+
         if t not in TIME_SLOTS:
             reply = f"Please choose from: {', '.join(TIME_SLOTS)}"
         elif is_booked(S["date"], t) or is_same_day_cutoff_passed(S["date"], t) or is_slot_past_today(S["date"], t):
-            reply = "That time is no longer available.\n\n" + find_next_available_days()
+            reply = "Sorry, that time is no longer available.\n\n" + find_next_available_days()
         else:
             save_booking(S["name"], S["email"], S["phone"], S["date"], t)
             send_confirmation(S["name"], S["email"], S["phone"], S["date"], t)
             notify_admin(all_bookings()[-1])
             pretty = datetime.strptime(S["date"], "%Y-%m-%d").strftime("%d %B %Y")
-            reply = f"Confirmed! Your call is on {pretty} at {t}\n\nType anything to book again."
-            app.chat_sessions.pop(sid, None)
+            reply = f"Confirmed! Your call is on {pretty} at {t}\n\nYou can close this chat. Thank you!"
+            app.chat_sessions.pop(sid, None)  # clear session
 
     resp = make_response(jsonify({"reply": reply}))
-    resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
+    resp.set_cookie("sid", sid, httponly=True, samesite="Lax", max_age=86400)
     return resp
 
 # ==================== MISSING ROUTES (ADD THESE) ====================
