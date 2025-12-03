@@ -209,7 +209,7 @@ def index():
 def static_files(path):
     return send_from_directory("static", path)
 
-@@app.route("/admin/save_settings", methods=["POST"])
+@app.route("/admin/save_settings", methods=["POST"])
 def save_settings():
     if not session.get("admin"):
         return "Access denied", 403
