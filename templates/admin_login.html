@@ -1,36 +1,26 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Admin Login</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css">
+    <title>Admin Login - ACOP</title>
+    <style>
+        body { font-family: Arial; padding: 40px; }
+        form { max-width: 350px; margin: auto; }
+        input { width: 100%; padding: 10px; margin: 10px 0; }
+    </style>
 </head>
+<body>
+    <h2>Admin Login</h2>
 
-<body class="bg-light">
-<div class="container d-flex justify-content-center align-items-center" style="height:100vh;">
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <p style="color:red;">{{ messages[0] }}</p>
+      {% endif %}
+    {% endwith %}
 
-    <div class="card p-4 shadow-sm" style="width:350px;">
-        <h3 class="text-center mb-3">Admin Login</h3>
-
-        {% with messages = get_flashed_messages() %}
-          {% if messages %}
-            <div class="alert alert-danger">{{ messages[0] }}</div>
-          {% endif %}
-        {% endwith %}
-
-        <form method="POST">
-            <div class="mb-3">
-                <label class="form-label">Username</label>
-                <input name="username" class="form-control">
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Password</label>
-                <input name="password" type="password" class="form-control">
-            </div>
-
-            <button class="btn btn-primary w-100">Login</button>
-        </form>
-    </div>
-</div>
+    <form method="POST">
+        <input name="username" placeholder="Username">
+        <input name="password" type="password" placeholder="Password">
+        <button>Login</button>
+    </form>
 </body>
 </html>
