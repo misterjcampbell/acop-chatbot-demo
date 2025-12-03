@@ -1,8 +1,8 @@
 # FINAL FIX 2025-12-01 — calendar toggle + blocking working
 # app.py - ACOP Booking Chatbot - FINAL WITH CLICKABLE CALENDAR BLOCKER
 from flask import (
-    Flask, request, jsonify, render_template, redirect, url_for,
-    session, make_response, flash
+    Flask, request, jsonify, render_template, redirect, url_for,
+    session, make_response, flash
 )
 from flask_cors import CORS
 import sqlite3
@@ -15,6 +15,7 @@ import uuid
 from datetime import datetime
 from datetime import timedelta
 import pytz
+import request
 SYDNEY_TZ = pytz.timezone("Australia/Sydney")
 from icalendar import Calendar, Event
 from functools import wraps
