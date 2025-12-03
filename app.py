@@ -36,7 +36,7 @@ TEAMS_WEBHOOK = os.getenv("TEAMS_WEBHOOK", "")
 ADMIN_USER = os.getenv("ADMIN_USER", "Admin")
 ADMIN_PASS = os.getenv("ADMIN_PASS", "Acop2025!")
 if not hasattr(app, "chat_sessions"):
-    app.chat_sessions = {}
+app.chat_sessions = {}
 # ==================== DATABASE INIT ====================
 def init_db():
     conn = sqlite3.connect(DB_FILE)
