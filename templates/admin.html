@@ -25,59 +25,76 @@
     </div>
 
     <!-- CALENDAR -->
-    <div class="calendar-container mb-4">
-        <div id="calendar"></div>
-    </div>
+<h4 class="mb-3">Manage Availability</h4>
 
-    <!-- BOOKINGS TABLE -->
-    <h4 class="mb-3">All Bookings</h4>
-
-    <table class="table table-bordered bg-white">
-        <thead class="table-dark">
-        <tr>
-            <th>ID</th><th>Name</th><th>Email</th><th>Phone</th>
-            <th>Date</th><th>Time</th><th>Actions</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for b in bookings %}
-            <tr>
-                <td>{{ b[0] }}</td>
-                <td>{{ b[1] }}</td>
-                <td>{{ b[2] }}</td>
-                <td>{{ b[3] }}</td>
-                <td>{{ b[4] }}</td>
-                <td>{{ b[5] }}</td>
-                <td>
-                    <form action="/admin/delete/{{ b[0] }}" method="POST" onsubmit="return confirm('Delete booking?')">
-                        <button class="btn btn-sm btn-danger">Delete</button>
-                    </form>
-                </td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
+<div class="card p-3 mb-4">
+    <div id="calendar"></div>
 </div>
+
+<style>
+    #calendar {
+        max-width: 650px;
+        margin: auto;
+    }
+    .fc-daygrid-day.fc-day-blocked {
+        background: #ffb3b3 !important;
+    }
+    .fc-daygrid-day.fc-day-has-booking {
+        background: #d6ecff !important;
+    }
+</style>
 
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-
     const calendarEl = document.getElementById("calendar");
+
+    const bookings = [
+        {% for b in bookings %}
+        "{{ b[4] }}",
+        {% endfor %}
+    ];
+
+    const blocked = [
+        {% for d in blocked_dates %}
+        "{{ d }}",
+        {% endfor %}
+    ];
 
     const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: "dayGridMonth",
-        events: [
-            {% for b in bookings %}
-            {
-                title: "{{ b[1]|e }} — {{ b[5] }}",
-                start: "{{ b[4] }}",
-                color: "#0098ea"
-            },
-            {% endfor %}
-        ]
+        height: "auto",
+
+        dateClick: async function(info) {
+            const date = info.dateStr;
+
+            const res = await fetch("/admin/toggle-date", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({date})
+            });
+
+            const out = await res.json();
+
+            if (out.blocked) {
+                info.dayEl.classList.add("fc-day-blocked");
+            } else {
+                info.dayEl.classList.remove("fc-day-blocked");
+            }
+        },
+
+        dayCellDidMount: function(arg) {
+            const date = arg.date.toISOString().split("T")[0];
+
+            if (blocked.includes(date)) {
+                arg.el.classList.add("fc-day-blocked");
+            }
+
+            if (bookings.includes(date)) {
+                arg.el.classList.add("fc-day-has-booking");
+            }
+        }
     });
 
     calendar.render();
