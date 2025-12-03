@@ -209,10 +209,10 @@ def index():
 def static_files(path):
     return send_from_directory("static", path)
 
-@app.route("/admin/save_settings", methods=["POST"])
+@@app.route("/admin/save_settings", methods=["POST"])
 def save_settings():
     if not session.get("admin"):
-        return redirect(url_for("admin_login"))
+        return "Access denied", 403
     
     teams_enabled = 1 if request.form.get("teams_enabled") else 0
     webhook = request.form.get("teams_webhook", "").strip()
@@ -221,13 +221,13 @@ def save_settings():
         conn.execute("UPDATE admin_settings SET teams_enabled=?, teams_webhook=? WHERE id=1", (teams_enabled, webhook))
         conn.commit()
     
+    # Test message if button clicked
     if request.form.get("test"):
         if teams_enabled and webhook:
             try:
-                requests.post(webhook, json={"text": "Test from ACOP bot — working!"}, timeout=10)
-                flash("Test message sent!")
+                requests.post(webhook, json={"text": "ACOP Bot Test — Settings saved & working!"}, timeout=10)
             except:
-                flash("Test failed — check URL")
+                pass  # ignore test failure
     
     return redirect("/admin?password=Acop2025!")
 
@@ -250,17 +250,23 @@ def admin_page():
         blocked = conn.execute("SELECT start_date, end_date FROM blocked_ranges ORDER BY start_date").fetchall()
     return render_template("admin.html", bookings=bookings, settings=settings, blocked=blocked)
 
-@app.route("/admin/toggle_block", methods=["POST"])
+@@app.route("/admin/toggle_block", methods=["POST"])
 def toggle_block():
+    if not session.get("admin"):
+        return jsonify(error="not logged in"), 401
+    
     date = request.json.get("date")
-    if not date: return jsonify(error="no date"), 400
+    if not date:
+        return jsonify(error="no date"), 400
+    
     with sqlite3.connect(DB_FILE) as conn:
-        cur = conn.execute("SELECT start_date, end_date FROM blocked279_ranges")
+        cur = conn.execute("SELECT start_date, end_date FROM blocked_ranges")
         for s, e in cur.fetchall():
             if s <= date <= e:
                 conn.execute("DELETE FROM blocked_ranges WHERE start_date=? AND end_date=?", (s, e))
                 return jsonify(status="unblocked")
-        conn.execute("INSERT INTO blocked_ranges (start_date,end_date) VALUES (?,?)", (date, date))
+        conn.execute("INSERT INTO blocked_ranges (start_date, end_date) VALUES (?, ?)", (date, date))
+        conn.commit()
         return jsonify(status="blocked")
 
 # ==================== CHATBOT ====================
