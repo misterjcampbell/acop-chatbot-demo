@@ -298,5 +298,22 @@ def api_message():
     resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
     return resp
 
+# ==================== MISSING ROUTES (ADD THESE) ====================
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+@app.route("/admin")
+def admin_page():
+    with sqlite3.connect(DB_FILE) as conn:
+        bookings = conn.execute("SELECT * FROM bookings ORDER BY date DESC, time DESC").fetchall()
+        settings = conn.execute("SELECT * FROM admin_settings WHERE id=1").fetchone() or (0,1,1,0,"")
+        blocked = conn.execute("SELECT start_date, end_date FROM blocked_ranges ORDER BY start_date").fetchall()
+    return render_template("admin.html", bookings=bookings, settings=settings, blocked=blocked)
+
+@app.route("/static/<path:path>")
+def static_files(path):
+    return send_from_directory("static", path)
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
