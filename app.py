@@ -226,7 +226,9 @@ def admin_logout():
 @app.route("/admin")
 @require_admin
 def admin():
-    return render_template("admin.html", bookings=all_bookings())
+    return render_template("admin.html", 
+                         bookings=all_bookings(),
+                         calendar_days=get_calendar_month())
 
 # ← Keep ALL your other admin routes exactly as they were (delete, export, settings, test_teams, toggle_block)
 
