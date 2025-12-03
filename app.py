@@ -23,7 +23,7 @@ SYDNEY_TZ = pytz.timezone("Australia/Sydney")
 LOCAL_TZ = SYDNEY_TZ
 
 SMTP_HOST = os.getenv("SMTP_HOST", "sandbox.smtp.mailtrap.io")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "2525"))
+SMTP_PORT = int(os.getenv("SMTP_PORT", "2525")
 SMTP_USER = os.getenv("SMTP_USER", "17d873b3a11a38")
 SMTP_PASS = os.getenv("SMTP_PASS", "453b9c740a0729")
 FROM_EMAIL = os.getenv("FROM_EMAIL", "enquiries@acop.edu.au")
