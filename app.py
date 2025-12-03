@@ -104,7 +104,9 @@ def init_db():
     conn.close()
 
 init_db()
-
+cur.execute("""CREATE TABLE IF NOT EXISTS blocked_dates (
+    date TEXT PRIMARY KEY
+)""")
 # ---------- Settings helpers ----------
 def get_settings():
     conn = get_conn(); cur = conn.cursor()
@@ -148,6 +150,24 @@ def update_settings(**kwargs):
     conn = get_conn(); cur = conn.cursor()
     cur.execute(sql, params)
     conn.commit(); conn.close()
+
+def is_blocked(date):
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("SELECT 1 FROM blocked_dates WHERE date=?", (date,))
+    out = cur.fetchone() is not None
+    conn.close()
+    return out
+
+def toggle_block(date):
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    if is_blocked(date):
+        cur.execute("DELETE FROM blocked_dates WHERE date=?", (date,))
+    else:
+        cur.execute("INSERT INTO blocked_dates (date) VALUES (?)", (date,))
+    conn.commit()
+    conn.close()
 
 # ---------- Chat session (persistent) ----------
 def load_session(sid):
@@ -465,7 +485,12 @@ def admin_test_teams():
         return "No Teams webhook configured."
     ok = post_to_teams(webhook, "ACOP Chatbot Test message")
     return "Test teams sent." if ok else "Test teams failed."
-
+@app.route("/admin/toggle-date", methods=["POST"])
+@require_admin
+def admin_toggle_date():
+    date = request.json.get("date")
+    toggle_block(date)
+    return {"status": "ok", "blocked": is_blocked(date)}
 # ---------- Chat endpoints ----------
 @app.route("/")
 def index():
