@@ -1,172 +1,88 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ACOP Bookings Admin</title>
+    <title>Admin Panel</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
+
     <style>
-        body {font-family: 'Segoe UI', sans-serif; margin:40px; background:#f5f7fa; color:#333}
-        h1 {color:#004cbf; text-align:center;}
-        .topbar {text-align:center; margin:20px 0; font-size:18px;}
-        .topbar a {margin:0 15px; color:#0098ea; text-decoration:none;}
-        .topbar a:hover {text-decoration:underline;}
-        .calendar-container {margin:30px auto; max-width:1200px;}
-        .calendar {background:white; padding:20px; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.1); margin-bottom:40px;}
-        .month {text-align:center; font-size:22px; font-weight:bold; margin-bottom:12px; color:#004cbf;}
-        .days {display:grid; grid-template-columns:repeat(7,1fr); gap:6px; text-align:center;}
-        .day-header {font-weight:bold; padding:10px; background:#eef;}
-        .day {padding:14px 4px; cursor:pointer; border-radius:8px; transition:0.2s; border:2px solid #ddd;}
-        .day.blocked {background:#e74c3c; color:white; border-color:#c0392b;}
-        .day:hover {transform:scale(1.08);}
-        .day.empty {visibility:hidden;}
-        table {width:100%; border-collapse:collapse; background:white; box-shadow:0 4px 15px rgba(0,0,0,0.1); margin-top:30px;}
-        th {background:#004cbf; color:white; padding:14px;}
-        td {padding:12px; border-bottom:1px solid #ddd; text-align:left;}
-        tr:nth-child(even) {background:#f8fbff;}
-        .del {background:#d9534f; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;}
-        .empty {text-align:center; color:#888; font-style:italic; padding:40px;}
-        .back {text-align:center; margin:30px;}
+        body { background:#f8f9fa; }
+        .calendar-container { background:white; padding:20px; border-radius:12px; }
     </style>
 </head>
+
 <body>
+<div class="container mt-4">
 
-    <h1>ACOP Bookings Admin</h1>
-    <div class="topbar">
-        <a href="/admin/settings">Settings</a> |
-        <a href="/admin/export">Export CSV</a> |
-        <a href="/admin/logout">Logout</a>
-    </div>
-    <hr>
-
-<!-- FIXED COMPACT CALENDAR – MONDAY START, DEC 1 = MONDAY, INSTANT TOGGLE -->
-<div style="margin:40px 0;">
-    <h2 style="text-align:center; color:#004cbf; margin-bottom:20px; font-size:20px;">
-        Block/Unblock Days — Click any day (red = blocked)
-    </h2>
-    <div style="display:flex; gap:20px; justify-content:center; flex-wrap:wrap; padding:10px; overflow-x:auto;">
-        {% for month in calendar_months %}
-        <div style="background:#fff; border-radius:14px; padding:18px; box-shadow:0 8px 25px rgba(0,0,0,0.12); min-width:310px;">
-            <div style="text-align:center; font-weight:bold; color:#004cbf; margin-bottom:14px; font-size:18px;">
-                {{ month.name }}
-            </div>
-            <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:7px; text-align:center; font-size:14px;">
-                <div style="font-weight:bold; color:#555;">M</div>
-                <div style="font-weight:bold; color:#555;">T</div>
-                <div style="font-weight:bold; color:#555;">W</div>
-                <div style="font-weight:bold; color:#555;">T</div>
-                <div style="font-weight:bold; color:#555;">F</div>
-                <div style="font-weight:bold; color:#555;">S</div>
-                <div style="font-weight:bold; color:#555;">S</div>
-
-                {% for day in month.days %}
-                    {% if day.num %}
-                        <div class="cal-day" 
-                             data-date="{{ day.date }}"
-                             onclick="toggleDay(this)"
-                             style="padding:11px 6px; border-radius:9px; cursor:pointer; font-weight:600;
-                                    background:{{ '#e74c3c' if day.blocked else '#f8f9fa' }};
-                                    color:{{ 'white' if day.blocked else '#333' }};
-                                    border:2px solid {{ '#c0392b' if day.blocked else '#ddd' }};">
-                            {{ day.num }}
-                        </div>
-                    {% else %}
-                        <div></div>
-                    {% endif %}
-                {% endfor %}
-            </div>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Admin Dashboard</h2>
+        <div>
+            <a href="/admin/settings" class="btn btn-secondary">Settings</a>
+            <a href="/admin/export" class="btn btn-info text-white">Export CSV</a>
+            <a href="/admin/logout" class="btn btn-danger">Logout</a>
         </div>
-        {% endfor %}
     </div>
-    <p style="text-align:center; margin-top:25px; color:#666; font-size:15px;">
-        Red = blocked · Grey = available · Click to toggle instantly
-    </p>
-</div>
-<script>
-function toggleDay(element) {
-    const date = element.dataset.date;
 
-    fetch('/admin/toggle_block', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'  // optional, helps backend detect AJAX
-        },
-        body: JSON.stringify({date: date})
-    })
-    .then(response => {
-        if (!response.ok) throw new Error('Network error');
-        // Toggle the visual state
-        const currentlyBlocked = element.classList.contains('blocked');
-        if (currentlyBlocked) {
-            element.classList.remove('blocked');
-            element.style.background = '#f8f9fa';
-            element.style.color = '#333';
-            element.style.border = '2px solid #ddd';
-        } else {
-            element.classList.add('blocked');
-            element.style.background = '#e74c3c';
-            element.style.color = 'white';
-            element.style.border = '2px solid #c0392b';
-        }
-    })
-    .catch(err => {
-        console.error(err);
-        alert('Failed to update – please try again');
-    });
-}
-</script>
+    <!-- CALENDAR -->
+    <div class="calendar-container mb-4">
+        <div id="calendar"></div>
+    </div>
+
     <!-- BOOKINGS TABLE -->
-    <h2 style="text-align:center; color:#004cbf;">Current Bookings</h2>
-    {% if bookings|length == 0 %}
-        <p class="empty">No bookings yet.</p>
-    {% else %}
-    <table>
+    <h4 class="mb-3">All Bookings</h4>
+
+    <table class="table table-bordered bg-white">
+        <thead class="table-dark">
         <tr>
-            <th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Date</th><th>Time</th><th>Action</th>
+            <th>ID</th><th>Name</th><th>Email</th><th>Phone</th>
+            <th>Date</th><th>Time</th><th>Actions</th>
         </tr>
+        </thead>
+        <tbody>
         {% for b in bookings %}
-        <tr>
-            <td>{{ b[0] }}</td>
-            <td>{{ b[1] }}</td>
-            <td>{{ b[2] }}</td>
-            <td>{{ b[3] }}</td>
-            <td>{{ b[4]|replace('-','/') }}</td>
-            <td>{{ b[5] }}</td>
-            <td>
-                <form method="POST" action="/admin/delete/{{ b[0] }}" style="display:inline"
-                      onsubmit="return confirm('Delete this booking?');">
-                    <button type="submit" class="del">Delete</button>
-                </form>
-            </td>
-        </tr>
+            <tr>
+                <td>{{ b[0] }}</td>
+                <td>{{ b[1] }}</td>
+                <td>{{ b[2] }}</td>
+                <td>{{ b[3] }}</td>
+                <td>{{ b[4] }}</td>
+                <td>{{ b[5] }}</td>
+                <td>
+                    <form action="/admin/delete/{{ b[0] }}" method="POST" onsubmit="return confirm('Delete booking?')">
+                        <button class="btn btn-sm btn-danger">Delete</button>
+                    </form>
+                </td>
+            </tr>
         {% endfor %}
+        </tbody>
     </table>
-    {% endif %}
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
 
 <script>
-function toggleDay(el) {
-    const date = el.dataset.date;
+document.addEventListener("DOMContentLoaded", function () {
 
-    fetch('/admin/toggle_block', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({date: date})
-    })
-    .then(r => r.json())
-    .then(data => {
-        // THIS IS THE MAGIC LINE — forces instant colour change without refresh
-        if (data.status === "blocked") {
-            el.style.background = '#e74c3c';
-            el.style.color = 'white';
-            el.style.border = '2px solid #c0392b';
-        } else {
-            el.style.background = '#f8f9fa';
-            el.style.color = '#333';
-            el.style.border = '2px solid #ddd';
-        }
-    })
-    .catch(() => alert('Error – try again'));
-}
+    const calendarEl = document.getElementById("calendar");
+
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: "dayGridMonth",
+        events: [
+            {% for b in bookings %}
+            {
+                title: "{{ b[1]|e }} — {{ b[5] }}",
+                start: "{{ b[4] }}",
+                color: "#0098ea"
+            },
+            {% endfor %}
+        ]
+    });
+
+    calendar.render();
+});
 </script>
+
 </body>
 </html>
