@@ -58,7 +58,7 @@ init_db()
 def is_date_blocked(date_str):
     with sqlite3.connect(DB_FILE) as conn:
         cur = conn.execute("SELECT 1 FROM blocked_ranges WHERE ? BETWEEN start_date AND end_date", (date_str,))
-        return cur.fetchonefetchone() is not None
+        return cur.fetchone() is not None
 
 def is_booked(date, time):
     with sqlite3.connect(DB_FILE) as conn:
