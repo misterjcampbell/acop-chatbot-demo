@@ -212,14 +212,19 @@ def api_message():
             S["stage"] = "email"
             reply = f"Thanks {S['name']}! What's your email?"
 
-    # Email
+# Email
     elif S["stage"] == "email":
-        if "@" not in msg and "." in msg:
-            S["email"] = msg
-            S["stage"] = "phone"
-            reply = "Your phone number?"
+        test = msg.strip().lower()
+        if "@" in test and "." in test and len(test) >= 5:
+            # extra tiny sanity check to block things like "a@b" if you want
+            if test.count("@") == 1 and test.index("@") > 0 and test.index(".") > test.index("@") + 1:
+                S["email"] = msg.strip()        # keep original capitalisation
+                S["stage"] = "phone"
+                reply = "Your phone number?"
+            else:
+                reply = "Please enter a valid email address."
         else:
-            reply = "Please enter a valid email."
+            reply = "Please enter a valid email address."
 
     # Phone
     elif S["stage"] == "phone":
