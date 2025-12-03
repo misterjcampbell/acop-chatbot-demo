@@ -209,6 +209,29 @@ def index():
 def static_files(path):
     return send_from_directory("static", path)
 
+@app.route("/admin/save_settings", methods=["POST"])
+def save_settings():
+    if not session.get("admin"):
+        return redirect(url_for("admin_login"))
+    
+    teams_enabled = 1 if request.form.get("teams_enabled") else 0
+    webhook = request.form.get("teams_webhook", "").strip()
+    
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.execute("UPDATE admin_settings SET teams_enabled=?, teams_webhook=? WHERE id=1", (teams_enabled, webhook))
+        conn.commit()
+    
+    if request.form.get("test"):
+        if teams_enabled and webhook:
+            try:
+                requests.post(webhook, json={"text": "Test from ACOP bot — working!"}, timeout=10)
+                flash("Test message sent!")
+            except:
+                flash("Test failed — check URL")
+    
+    return redirect("/admin?password=Acop2025!")
+
+
 # ADMIN — YOUR WAY (simple password in URL)
 @app.route("/admin")
 def admin_page():
