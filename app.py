@@ -328,6 +328,40 @@ def api_message():
     resp = make_response(jsonify({"reply": reply}))
     resp.set_cookie("sid", sid, httponly=True, samesite="Lax", max_age=86400)
     return resp
+@app.route("/admin/settings")
+def admin_settings():
+    if not session.get("admin"):
+        return redirect(url_for("admin_login"))
+    with sqlite3.connect(DB_FILE) as conn:
+        settings = conn.execute("SELECT * FROM admin_settings WHERE id=1").fetchone() or (1,1,1,1,"")
+    return render_template("admin.html", active_tab="settings", settings=settings)
 
+@app.route("/admin/settings", methods=["POST"])
+def admin_settings_save():
+    if not session.get("admin"):
+        return jsonify(error="auth"), 401
+    
+    teams_enabled = 1 if request.form.get("teams_enabled") else 0
+    teams_webhook = request.form.get("teams_webhook", "").strip()
+    
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.execute("""
+            UPDATE admin_settings SET 
+            teams_enabled=?, teams_webhook=?
+            WHERE id=1
+        """, (teams_enabled, teams_webhook))
+        conn.commit()
+    
+    # Send test message if requested
+    if request.form.get("test_teams"):
+        try:
+            if teams_enabled and teams_webhook:
+                requests.post(teams_webhook, json={"text": "Teams test from ACOP bot — working!"}, timeout=10)
+        except:
+            pass
+    
+    flash("Settings saved!")
+    return redirect(url_for("admin_settings"))
+    
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
