@@ -1,43 +1,31 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ACOP Assessment Booking</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <style>
-        /* Extra safety — ensure nothing else appears on the page */
-        body, html { margin:0; padding:0; height:100%; overflow:hidden; background:transparent; }
-    </style>
+  <meta charset="utf-8">
+  <title>ACOP Booking Assistant</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
-    <!-- Floating Chat Button -->
-    <button id="chat-toggle">Chat</button>
+<button id="chat-toggle">Chat</button>
 
-    <!-- Chat Popup Window -->
-    <div id="chat-popup">
-        <div id="chat-header">
-            <div>
-                <strong>ACOP Booking Assistant</strong><br>
-                <small style="opacity:0.9">Usually replies in seconds</small>
-            </div>
-            <button id="close-chat">×</button>
-        </div>
+<div id="chat-popup">
+  <div id="chat-header">
+    <div><strong>ACOP Booking Assistant</strong><br><small>Usually replies in seconds</small></div>
+    <button id="close-chat">×</button>
+  </div>
 
-        <div id="chat-box">
-            <div class="msg bot">
-                Hi! I'm here to help you book your assessment call.<br><br>
-                What's your name?
-            </div>
-        </div>
+  <div id="chat-box">
+    <div class="msg bot">Hi! I'm here to help you book your assessment call.\n\nWhat's your name?</div>
+  </div>
 
-        <div id="chat-input">
-            <input type="text" id="txt" placeholder="Type a message..." autocomplete="off">
-            <button id="send">Send</button>
-        </div>
-    </div>
+  <div id="chat-input">
+    <input type="text" id="txt" placeholder="Type a message..." autocomplete="off" />
+    <button id="send">Send</button>
+  </div>
+</div>
 
-    <script src="/static/script.js"></script>
+<script src="/static/script.js" defer></script>
 </body>
 </html>
