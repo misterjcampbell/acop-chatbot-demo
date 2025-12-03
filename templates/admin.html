@@ -100,6 +100,33 @@ document.addEventListener("DOMContentLoaded", function () {
     calendar.render();
 });
 </script>
+    <!-- BOOKINGS TABLE -->
+    <h4 class="mb-3">All Bookings</h4>
 
+    <table class="table table-bordered bg-white">
+        <thead class="table-dark">
+        <tr>
+            <th>ID</th><th>Name</th><th>Email</th><th>Phone</th>
+            <th>Date</th><th>Time</th><th>Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for b in bookings %}
+            <tr>
+                <td>{{ b[0] }}</td>
+                <td>{{ b[1] }}</td>
+                <td>{{ b[2] }}</td>
+                <td>{{ b[3] }}</td>
+                <td>{{ b[4] }}</td>
+                <td>{{ b[5] }}</td>
+                <td>
+                    <form action="/admin/delete/{{ b[0] }}" method="POST" onsubmit="return confirm('Delete booking?')">
+                        <button class="btn btn-sm btn-danger">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
 </body>
 </html>
