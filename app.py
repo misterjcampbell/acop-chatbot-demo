@@ -250,6 +250,7 @@ def api_message():
         S["stage"] = "name"
         reply = "Booking cancelled. Hi! What's your name?"
 
+
     elif S["stage"] == "name":
         if len(msg) < 2 or any(c.isdigit() for c in msg):
             reply = "Please enter a valid name."
@@ -258,14 +259,13 @@ def api_message():
             S["stage"] = "email"
             reply = f"Thanks {S['name']}! What's your email?"
 
-    Vessels["stage"] == "email":
+    elif S["stage"] == "email":
         if "@" not in msg or "." not in msg:
             reply = "Please enter a valid email."
         else:
             S["email"] = msg
             S["stage"] = "phone"
             reply = "Your phone number?"
-
     elif S["stage"] == "phone":
         if len("".join(c for c in msg if c.isdigit())) < 8:
             reply = "Please enter a valid phone number."
