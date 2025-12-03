@@ -64,49 +64,42 @@ def get_conn():
     return sqlite3.connect(DB_FILE)
 
 def init_db():
-    conn = get_conn()
+    conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
-    # bookings
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS bookings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT NOT NULL,
-            phone TEXT NOT NULL,
-            date TEXT NOT NULL, -- YYYY-MM-DD
-            time TEXT NOT NULL, -- HH:MM
-            created_at TEXT NOT NULL
-        )
-    """)
-    # admin settings (single row)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS admin_settings (
-            id INTEGER PRIMARY KEY,
-            email_per_booking INTEGER DEFAULT 1,
-            attach_csv INTEGER DEFAULT 1,
-            daily_summary INTEGER DEFAULT 1,
-            weekly_summary INTEGER DEFAULT 1,
-            teams_enabled INTEGER DEFAULT 1,
-            teams_webhook TEXT DEFAULT ''
-        )
-    """)
-    # chat sessions (persistent)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS chat_sessions (
-            sid TEXT PRIMARY KEY,
-            state TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )
-    """)
-    # ensure single settings row
+
+    # Existing bookings table
+    cur.execute("""CREATE TABLE IF NOT EXISTS bookings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        date TEXT NOT NULL,
+        time TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )""")
+
+    # Admin settings table
+    cur.execute("""CREATE TABLE IF NOT EXISTS admin_settings (
+        id INTEGER PRIMARY KEY,
+        email_per_booking INTEGER DEFAULT 1,
+        attach_csv INTEGER DEFAULT 1,
+        daily_summary INTEGER DEFAULT 1,
+        weekly_summary INTEGER DEFAULT 1,
+        teams_enabled INTEGER DEFAULT 1,
+        teams_webhook TEXT DEFAULT ''
+    )""")
     cur.execute("INSERT OR IGNORE INTO admin_settings (id) VALUES (1)")
+
+    # ⭐ NEW BLOCKED DATES TABLE — safe and correct here
+    cur.execute("""CREATE TABLE IF NOT EXISTS blocked_dates (
+        date TEXT PRIMARY KEY
+    )""")
+
     conn.commit()
     conn.close()
 
 init_db()
-cur.execute("""CREATE TABLE IF NOT EXISTS blocked_dates (
-    date TEXT PRIMARY KEY
-)""")
+
 # ---------- Settings helpers ----------
 def get_settings():
     conn = get_conn(); cur = conn.cursor()
