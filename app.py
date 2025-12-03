@@ -1,323 +1,358 @@
-# FINAL FIX 2025-12-01 — calendar toggle + blocking working
-# app.py - ACOP Booking Chatbot - FINAL WITH CLICKABLE CALENDAR BLOCKER
+# app.py — final production-ready ACOP chatbot backend (Option A)
+# Uses templates: templates/index.html, templates/admin.html,
+# templates/admin_login.html, templates/admin_settings.html
+#
+# Features:
+#  - persistent chat sessions (SQLite)
+#  - robust date/time parsing
+#  - Mailtrap email sending (admin + client, .ics)
+#  - Teams webhook notifications (configurable via admin settings)
+#  - Admin panel (login/logout, view, create, delete, export, settings, test email/teams)
+#  - Safe error handling + logging
+#  - Render-compatible (binds 0.0.0.0 to PORT)
+import os
+import re
+import io
+import json
+import csv
+import uuid
+import logging
+from datetime import datetime, timedelta
+from functools import wraps
+from email.message import EmailMessage
+
+import pytz
+import requests
+from icalendar import Calendar, Event
+
 from flask import (
-    Flask, request, jsonify, render_template, redirect, url_for,
-    session, make_response, flash
+    Flask, request, jsonify, make_response, redirect, url_for,
+    session, flash, send_file, render_template
 )
 from flask_cors import CORS
 import sqlite3
-import os
 import smtplib
-from email.message import EmailMessage
-import csv
-import io
-import uuid
-from datetime import datetime
-from datetime import timedelta
-import pytz
 
-SYDNEY_TZ = pytz.timezone("Australia/Sydney")
-from icalendar import Calendar, Event
-from functools import wraps
-
-app = Flask(__name__)
+# ---------- App setup ----------
+app = Flask(__name__, template_folder="templates", static_folder="static")
 app.secret_key = os.environ.get("FLASK_SECRET", "acop-2025-final")
 CORS(app)
+logging.basicConfig(level=logging.INFO)
 
-# ==================== CONFIG ====================
-DB_FILE = "bookings.db"
+# ---------- Config ----------
+DB_FILE = os.getenv("DB_FILE", "bookings.db")
+LOCAL_TZ = pytz.timezone(os.getenv("LOCAL_TZ", "Australia/Sydney"))
 TIME_SLOTS = ["09:00", "11:00", "15:30"]
-LOCAL_TZ = pytz.timezone("Australia/Sydney")
 
+# Mailtrap defaults you confirmed (override via env)
 SMTP_HOST = os.getenv("SMTP_HOST", "sandbox.smtp.mailtrap.io")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "2525"))
 SMTP_USER = os.getenv("SMTP_USER", "17d873b3a11a38")
 SMTP_PASS = os.getenv("SMTP_PASS", "453b9c740a0729")
 FROM_EMAIL = os.getenv("FROM_EMAIL", "enquiries@acop.edu.au")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "johnc@acop.edu.au")
-TEAMS_WEBHOOK = os.getenv("TEAMS_WEBHOOK", "")
 
+# Teams default (can be configured in admin settings)
+TEAMS_WEBHOOK_ENV = os.getenv("TEAMS_WEBHOOK", "")
+
+# Admin auth (override via env if desired)
 ADMIN_USER = os.getenv("ADMIN_USER", "Admin")
 ADMIN_PASS = os.getenv("ADMIN_PASS", "Acop2025!")
 
-if not hasattr(app, "chat_sessions"):
-    app.chat_sessions = {}
+# ---------- Database helpers ----------
+def get_conn():
+    return sqlite3.connect(DB_FILE)
 
-# ==================== DATABASE INIT ====================
 def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    conn.executescript("""
+    conn = get_conn()
+    cur = conn.cursor()
+    # bookings
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS bookings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             email TEXT NOT NULL,
             phone TEXT NOT NULL,
-            date TEXT NOT NULL,
-            time TEXT NOT NULL,
+            date TEXT NOT NULL, -- YYYY-MM-DD
+            time TEXT NOT NULL, -- HH:MM
             created_at TEXT NOT NULL
-        );
+        )
+    """)
+    # admin settings (single row)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS admin_settings (
             id INTEGER PRIMARY KEY,
             email_per_booking INTEGER DEFAULT 1,
             attach_csv INTEGER DEFAULT 1,
+            daily_summary INTEGER DEFAULT 1,
+            weekly_summary INTEGER DEFAULT 1,
             teams_enabled INTEGER DEFAULT 1,
             teams_webhook TEXT DEFAULT ''
-        );
-        CREATE TABLE IF NOT EXISTS blocked_ranges (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            start_date TEXT NOT NULL,
-            end_date TEXT NOT NULL
-        );
-        INSERT OR IGNORE INTO admin_settings (id) VALUES (1);
+        )
     """)
+    # chat sessions (persistent)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+            sid TEXT PRIMARY KEY,
+            state TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    # ensure single settings row
+    cur.execute("INSERT OR IGNORE INTO admin_settings (id) VALUES (1)")
     conn.commit()
     conn.close()
+
 init_db()
 
-# ==================== DB HELPERS ====================
-def is_slot_past_today(date_str, time_slot):
+# ---------- Settings helpers ----------
+def get_settings():
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute("SELECT email_per_booking, attach_csv, daily_summary, weekly_summary, teams_enabled, teams_webhook FROM admin_settings WHERE id=1")
+    row = cur.fetchone()
+    conn.close()
+    defaults = {
+        "email_per_booking": True,
+        "attach_csv": True,
+        "daily_summary": True,
+        "weekly_summary": True,
+        "teams_enabled": True,
+        "teams_webhook": ""
+    }
+    if not row:
+        return defaults
+    return {
+        "email_per_booking": bool(row[0]),
+        "attach_csv": bool(row[1]),
+        "daily_summary": bool(row[2]),
+        "weekly_summary": bool(row[3]),
+        "teams_enabled": bool(row[4]),
+        "teams_webhook": row[5] or ""
+    }
+
+def update_settings(**kwargs):
+    allowed = ("email_per_booking","attach_csv","daily_summary","weekly_summary","teams_enabled","teams_webhook")
+    sets = []
+    params = []
+    for k in allowed:
+        if k in kwargs:
+            sets.append(f"{k} = ?")
+            v = kwargs[k]
+            if isinstance(v, bool):
+                params.append(1 if v else 0)
+            else:
+                params.append(v)
+    if not sets:
+        return
+    sql = "UPDATE admin_settings SET " + ", ".join(sets) + " WHERE id=1"
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute(sql, params)
+    conn.commit(); conn.close()
+
+# ---------- Chat session (persistent) ----------
+def load_session(sid):
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute("SELECT state FROM chat_sessions WHERE sid=?", (sid,))
+    row = cur.fetchone(); conn.close()
+    if not row:
+        return {"stage": "name"}
     try:
-        now = datetime.now(SYDNEY_TZ)
-        slot_dt = datetime.strptime(f"{date_str} {time_slot}", "%Y-%m-%d %H:%M")
-        slot_dt = SYDNEY_TZ.localize(slot_dt)
-        return slot_dt < now
-    except:
-        return True
-def is_same_day_cutoff_passed(date_str, time_slot):
-    try:
-        now = datetime.now(SYDNEY_TZ)
-        booking_dt = datetime.strptime(f"{date_str} {time_slot}", "%Y-%m-%d %H:%M")
-        booking_dt = SYDNEY_TZ.localize(booking_dt)  # make it timezone-aware
-        if booking_dt.date() == now.date():
-            cutoff = now + timedelta(hours=2)
-            return booking_dt < cutoff
-        return False
-    except:
-        return False
-def save_booking(name, email, phone, date, time):
-    conn = sqlite3.connect(DB_FILE)
-    cur = conn.cursor()
+        return json.loads(row[0])
+    except Exception:
+        return {"stage": "name"}
+
+def save_session(sid, state):
+    now = datetime.now(LOCAL_TZ).isoformat()
+    text = json.dumps(state)
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute("INSERT OR REPLACE INTO chat_sessions (sid, state, updated_at) VALUES (?, ?, ?)", (sid, text, now))
+    conn.commit(); conn.close()
+
+def delete_session(sid):
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute("DELETE FROM chat_sessions WHERE sid=?", (sid,))
+    conn.commit(); conn.close()
+
+# ---------- Bookings helpers ----------
+def is_booked(date_str, time_str):
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute("SELECT 1 FROM bookings WHERE date=? AND time=?", (date_str, time_str))
+    r = cur.fetchone(); conn.close()
+    return r is not None
+
+def save_booking(name, email, phone, date_str, time_str):
+    conn = get_conn(); cur = conn.cursor()
     cur.execute("INSERT INTO bookings (name,email,phone,date,time,created_at) VALUES (?,?,?,?,?,?)",
-                (name, email, phone, date, time, datetime.now(LOCAL_TZ).isoformat()))
+                (name, email, phone, date_str, time_str, datetime.now(LOCAL_TZ).isoformat()))
     conn.commit()
-    booking_id = cur.lastrowid
+    bid = cur.lastrowid
     conn.close()
-    return booking_id
+    return bid
 
-def is_booked(date, time):
-    conn = sqlite3.connect(DB_FILE)
-    cur = conn.cursor()
-    cur.execute("SELECT 1 FROM bookings WHERE date=? AND time=?", (date, time))
-    result = cur.fetchone() is not None
-    conn.close()
-    return result
+def get_booking(bid):
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute("SELECT id,name,email,phone,date,time,created_at FROM bookings WHERE id=?", (bid,))
+    row = cur.fetchone(); conn.close()
+    return row
 
-def is_past(date_str):
-    return datetime.strptime(date_str, "%Y-%m-%d").date() < datetime.now(LOCAL_TZ).date()
-
-def all_bookings():
-    conn = sqlite3.connect(DB_FILE)
-    cur = conn.cursor()
-    cur.execute("SELECT id,name,email,phone,date,time,created_at FROM bookings ORDER BY date,time")
-    rows = cur.fetchall()
-    conn.close()
+def all_bookings(start=None, end=None):
+    conn = get_conn(); cur = conn.cursor()
+    if start and end:
+        cur.execute("SELECT id,name,email,phone,date,time,created_at FROM bookings WHERE date BETWEEN ? AND ? ORDER BY date,time", (start, end))
+    else:
+        cur.execute("SELECT id,name,email,phone,date,time,created_at FROM bookings ORDER BY date,time")
+    rows = cur.fetchall(); conn.close()
     return rows
 
 def delete_booking(bid):
-    conn = sqlite3.connect(DB_FILE)
-    conn.execute("DELETE FROM bookings WHERE id=?", (bid,))
-    conn.commit()
-    conn.close()
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute("DELETE FROM bookings WHERE id=?", (bid,))
+    conn.commit(); conn.close()
 
-# Blocked ranges
-def add_blocked_range(start, end):
-    conn = sqlite3.connect(DB_FILE)
-    conn.execute("INSERT INTO blocked_ranges (start_date,end_date) VALUES (?,?)", (start, end))
-    conn.commit()
-    conn.close()
+# ---------- Date / Time parsing ----------
+_time_re = re.compile(r'^\s*(\d{1,2})(?::|\.|)?(\d{2})?\s*(am|pm|a\.m\.|p\.m\.)?\s*$', re.I)
+def normalize_time(s):
+    if not s or not isinstance(s, str):
+        return None
+    s_clean = s.strip().lower().replace(' ', '').replace('hrs','')
+    # direct hh:mm
+    if re.match(r'^\d{1,2}:\d{2}$', s_clean):
+        hh_mm = s_clean
+    elif re.match(r'^\d{3,4}$', s_clean):  # 900, 1530
+        if len(s_clean) == 3:
+            hh_mm = '0' + s_clean[0] + ':' + s_clean[1:]
+        else:
+            hh_mm = s_clean[:2] + ':' + s_clean[2:]
+    else:
+        m = _time_re.match(s)
+        if not m:
+            return None
+        h = int(m.group(1))
+        mmin = m.group(2) or '00'
+        ampm = (m.group(3) or '').lower()
+        if ampm.startswith('p') and h < 12:
+            h += 12
+        if ampm.startswith('a') and h == 12:
+            h = 0
+        hh_mm = f"{h:02d}:{int(mmin):02d}"
+    if hh_mm in TIME_SLOTS:
+        return hh_mm
+    # tolerances
+    for ts in TIME_SLOTS:
+        if hh_mm == ts:
+            return ts
+    return None
 
-def get_blocked_ranges():
-    conn = sqlite3.connect(DB_FILE)
-    cur = conn.cursor()
-    cur.execute("SELECT start_date, end_date FROM blocked_ranges ORDER BY start_date")
-    rows = cur.fetchall()
-    conn.close()
-    return rows
-
-def is_date_blocked(date_str):
-    for s, e in get_blocked_ranges():
-        if s <= date_str <= e:
-            return True
-    return False
-
-# Calendar for admin panel
-def get_calendar_month(year=None, month=None):
-    if not year:
-        now = datetime.now()
-        year, month = now.year, now.month
-    first = datetime(year, month, 1)
-    start = first - timedelta(days=(first.weekday() + 1) % 7)  # Sunday start
-    days = []
-    for i in range(42):
-        d = start + timedelta(days=i)
-        date_str = d.strftime("%Y-%m-%d")
-        days.append({
-            "date": date_str,
-            "num": d.day if d.month == month else "",
-            "blocked": is_date_blocked(date_str)
-        })
-    return days
-
-
-
-def find_next_available_days(start_from=None):
-    now = datetime.now(SYDNEY_TZ)
-    today = now.date()
-
-    # Decide where to start searching from
-    if start_from:
+def parse_date_input(s):
+    if not s or not isinstance(s, str):
+        return None
+    s = s.strip()
+    for fmt in ("%d/%m/%Y","%d-%m-%Y","%d/%m/%y","%Y-%m-%d"):
         try:
-            # User typed a date → start searching FROM THAT DATE (even if it's in the future)
-            search_start_date = datetime.strptime(start_from, "%Y-%m-%d").date()
+            d = datetime.strptime(s, fmt)
+            return d.strftime("%Y-%m-%d")
         except:
-            search_start_date = today
-    else:
-        search_start_date = today
-
-    # But never go backwards — if somehow the hint is in the past, start from today
-    search_start_date = max(search_start_date, today)
-
-    found = 0
-    suggestions = []
-    current = datetime.combine(search_start_date, datetime.min.time())
-
-    for i in range(0, 200):  # look up to ~6 months ahead
-        check_date = current + timedelta(days=i)
-        if check_date.weekday() >= 5:  # skip weekends
             continue
+    return None
 
-        date_str = check_date.strftime("%Y-%m-%d")
-        if is_date_blocked(date_str):
-            continue
-
-        # Check each time slot isn't already passed
-        free = []
-        for t in TIME_SLOTS:
-            if not is_booked(date_str, t) and not is_slot_past_today(date_str, t):
-                free.append(t)
-
-        if free:
-            pretty = check_date.strftime("%A %d %B")
-            suggestions.append(f"• {pretty} – {', '.join(free)}")
-            found += 1
-            if found >= 3:
-                break
-
-    if suggestions:
-        return "Here are the next 3 available days:\n\n" + "\n".join(suggestions) + "\n\nJust reply with your preferred date!"
-    else:
-        return "No availability found. Please try a different date or contact us directly."
-
-# ←←← THIS BLANK LINE IS REQUIRED IN PYTHON ←←←
 def is_past(date_str):
     try:
-        return datetime.strptime(date_str, "%Y-%m-%d").date() < datetime.now(SYDNEY_TZ).date()
+        return datetime.strptime(date_str, "%Y-%m-%d").date() < datetime.now(LOCAL_TZ).date()
     except:
         return False
 
-# ==================== EMAIL & TEAMS ====================
-def send_email(to, subject, text, html=None, attachments=None):
-    msg = EmailMessage()
-    msg["From"] = FROM_EMAIL
-    msg["To"] = to
-    msg["Subject"] = subject
-    msg.set_content(text)
-    if html:
-        msg.add_alternative(html, subtype="html")
-    if attachments:
-        for fname, data, subtype in attachments:
-            msg.add_attachment(data, maintype="text" if subtype=="csv" else "application", subtype=subtype, filename=fname)
+# ---------- Email & Teams ----------
+def send_email_with_attachments(to_email, subject, plain_text, html=None, attachments=None):
     try:
+        msg = EmailMessage()
+        msg["From"] = FROM_EMAIL
+        msg["To"] = to_email
+        msg["Subject"] = subject
+        msg.set_content(plain_text)
+        if html:
+            msg.add_alternative(html, subtype="html")
+        if attachments:
+            for fname, data_bytes, subtype in attachments:
+                maintype = "text" if subtype == "csv" else "application"
+                msg.add_attachment(data_bytes, maintype=maintype, subtype=subtype, filename=fname)
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
             s.login(SMTP_USER, SMTP_PASS)
             s.send_message(msg)
+        app.logger.info("Email sent to %s subject=%s", to_email, subject)
         return True
-    except:
+    except Exception as e:
+        app.logger.exception("Email send failed: %s", e)
         return False
 
-def send_confirmation(name, email, phone, date, time):
-    dt = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
-    cal = Calendar()
-    cal.add('prodid', '-//ACOP//')
-    cal.add('version', '2.0')
-    event = Event()
-    event.add('summary', 'ACOP Assessment Call')
-    event.add('dtstart', dt)
-    event.add('dtend', dt + timedelta(minutes=60))
-    event.add('description', f'Call with {name}')
-    cal.add_component(event)
+def make_single_booking_csv_bytes(row):
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["ID","Name","Email","Phone","Date","Time","CreatedAt"])
+    w.writerow(row)
+    return buf.getvalue().encode('utf-8')
 
-    pretty = datetime.strptime(date, "%Y-%m-%d").strftime("%d %B %Y")
-    text = f"Hi {name},\n\nYour assessment call is confirmed for {pretty} at {time}.\n\n— ACOP Team"
-    html = f"<h3>Hi {name}!</h3><p>Your call is on <strong>{pretty} at {time}</strong>.</p>"
-
-    send_email(email, "Your ACOP Call is Confirmed", text, html,
-               [("ACOP-Call.ics", cal.to_ical(), "ics")])
-
-def notify_admin(booking_row):
-    # booking_row = (id, name, email, phone, date, time, created_at)
-    booking_id, name, email, phone, date, time, created_at = booking_row
-    
-    pretty_date = datetime.strptime(date, "%Y-%m-%d").strftime("%d %B %Y")
-    pretty_created = datetime.fromisoformat(created_at.replace("Z", "+00:00")).astimezone(SYDNEY_TZ).strftime("%d %B %Y, %I:%M %p")
-
-    text = f"New booking:\nName: {name}\nEmail: {email}\nPhone: {phone}\nDate: {pretty_date}\nTime: {time}\nBooked: {pretty_created}"
-    html = f"""
-    <h3>New Booking Received</h3>
-    <p><strong>{name}</strong><br>
-    {email}<br>
-    {phone}<br>
-    <strong>{pretty_date} at {time}</strong><br>
-    Booked: {pretty_created}</p>
-    """
-
-    # Build clean CSV
-    csv_output = io.StringIO()
-    writer = csv.writer(csv_output)
-    writer.writerow(["ID", "Name", "Email", "Phone", "Date", "Time", "Booked At"])
-    writer.writerow([booking_id, name, email, phone, date, time, pretty_created])
-    
-    attachments = [
-        ("booking.csv", csv_output.getvalue().encode('utf-8'), "csv")
-    ]
-
-    send_email(
-        to=ADMIN_EMAIL,
-        subject=f"New Booking: {name} – {pretty_date} {time}",
-        text=text,
-        html=html,
-        attachments=attachments
-    )
-
- # === TEAMS NOTIFICATION (works with new Workflows URLs) ===
+def send_confirmation_email(name, email, phone, date_str, time_str):
     try:
-        conn = sqlite3.connect(DB_FILE)
-        cur = conn.cursor()
-        cur.execute("SELECT teams_enabled, teams_webhook FROM admin_settings WHERE id=1")
-        row = cur.fetchone()
-        conn.close()
-
-        if row and row[0] and row[1]:
-            url = row[1].strip()
-            if url:
-                requests.post(
-                    url,
-                    json={"text": f"**New ACOP Booking**\n{name}\n{email} | {phone}\n**{pretty_date} at {time}**"},
-                    timeout=10
-                )
+        subj = "Your ACOP Assessment Call is Confirmed"
+        pretty = datetime.strptime(date_str, "%Y-%m-%d").strftime("%d %B %Y")
+        text = f"Hi {name},\n\nYour call is on {pretty} at {time_str}.\n\n— ACOP Team"
+        html = f"<h3>Hi {name}!</h3><p>Your call is on <strong>{pretty} at {time_str}</strong>.</p>"
+        dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+        dt = LOCAL_TZ.localize(dt)
+        cal = Calendar(); cal.add('prodid','-//ACOP//'); cal.add('version','2.0')
+        ev = Event()
+        ev.add('summary','ACOP Assessment Call')
+        ev.add('dtstart', dt)
+        ev.add('dtend', dt + timedelta(minutes=60))
+        ev.add('description', f'Call with {name}')
+        cal.add_component(ev)
+        attachments = [("ACOP-Call.ics", cal.to_ical(), "ics")]
+        return send_email_with_attachments(email, subj, text, html=html, attachments=attachments)
     except Exception as e:
-        print(f"Teams failed (will retry next booking): {e}")
-# ==================== ADMIN ROUTES ====================
+        app.logger.exception("send_confirmation_email failed: %s", e)
+        return False
+
+def post_to_teams(webhook, text):
+    if not webhook:
+        return False
+    try:
+        resp = requests.post(webhook, json={"text": text}, timeout=8)
+        resp.raise_for_status()
+        return True
+    except Exception as e:
+        app.logger.exception("post_to_teams failed: %s", e)
+        return False
+
+def notify_on_booking(booking_row):
+    try:
+        settings = get_settings()
+        pretty = datetime.strptime(booking_row[4], "%Y-%m-%d").strftime("%d %B %Y")
+        if settings.get("email_per_booking"):
+            subj = f"New Booking: {booking_row[1]} — {pretty} {booking_row[5]}"
+            plain = (
+                f"A new booking has been made:\n\n"
+                f"Name: {booking_row[1]}\nEmail: {booking_row[2]}\nPhone: {booking_row[3]}\nDate: {pretty}\nTime: {booking_row[5]}\n"
+            )
+            html = (
+                f"<h3>New Booking</h3>"
+                f"<p><strong>Name:</strong> {booking_row[1]}</p>"
+                f"<p><strong>Email:</strong> {booking_row[2]}</p>"
+                f"<p><strong>Phone:</strong> {booking_row[3]}</p>"
+                f"<p><strong>Date:</strong> {pretty}</p>"
+                f"<p><strong>Time:</strong> {booking_row[5]}</p>"
+            )
+            attachments = []
+            if settings.get("attach_csv"):
+                attachments.append(("booking.csv", make_single_booking_csv_bytes(booking_row), "csv"))
+            send_email_with_attachments(ADMIN_EMAIL, subj, plain, html=html, attachments=attachments if attachments else None)
+        webhook = settings.get("teams_webhook") or TEAMS_WEBHOOK_ENV
+        if settings.get("teams_enabled") and webhook:
+            text = f"📅 New Booking — {booking_row[1]} — {booking_row[4]} {booking_row[5]}"
+            post_to_teams(webhook, text)
+    except Exception as e:
+        app.logger.exception("notify_on_booking failed: %s", e)
+
+# ---------- Admin auth ----------
 def require_admin(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
@@ -326,28 +361,58 @@ def require_admin(fn):
         return fn(*args, **kwargs)
     return wrapper
 
-@app.route("/admin/login", methods=["GET", "POST"])
+@app.route("/admin/login", methods=["GET","POST"])
 def admin_login():
     if session.get("admin_logged_in"):
         return redirect(url_for("admin"))
+    error = None
     if request.method == "POST":
-        if request.form.get("username") == ADMIN_USER and request.form.get("password") == ADMIN_PASS:
+        u = request.form.get("username","")
+        p = request.form.get("password","")
+        if u == ADMIN_USER and p == ADMIN_PASS:
             session["admin_logged_in"] = True
+            session["admin_username"] = u
             return redirect(url_for("admin"))
-        flash("Invalid credentials")
-    return render_template("admin_login.html")
+        error = "Invalid credentials"
+        flash(error)
+    # Use your template file
+    return render_template("admin_login.html", error=error)
 
 @app.route("/admin/logout")
 def admin_logout():
     session.pop("admin_logged_in", None)
+    session.pop("admin_username", None)
     return redirect(url_for("admin_login"))
 
 @app.route("/admin")
 @require_admin
 def admin():
-    return render_template("admin.html",
-                         bookings=all_bookings(),
-                         calendar_days=get_calendar_month())
+    rows = all_bookings()
+    settings = get_settings()
+    return render_template("admin.html", bookings=rows, settings=settings, admin_user=session.get("admin_username"))
+
+@app.route("/admin/create", methods=["POST"])
+@require_admin
+def admin_create():
+    name = request.form.get("name","").strip()
+    email = request.form.get("email","").strip()
+    phone = request.form.get("phone","").strip()
+    date = request.form.get("date","").strip()
+    time = request.form.get("time","").strip()
+    # basic validation
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except:
+        flash("Invalid date format (use YYYY-MM-DD)")
+        return redirect(url_for("admin"))
+    if is_booked(date, time):
+        flash("Slot already booked")
+        return redirect(url_for("admin"))
+    bid = save_booking(name, email, phone, date, time)
+    notify_on_booking(get_booking(bid))
+    send_confirmation_email(name, email, phone, date, time)
+    flash("Booking created")
+    return redirect(url_for("admin"))
 
 @app.route("/admin/delete/<int:bid>", methods=["POST"])
 @require_admin
@@ -359,231 +424,174 @@ def admin_delete(bid):
 @app.route("/admin/export")
 @require_admin
 def admin_export():
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["ID","Name","Email","Phone","Date","Time","Created"])
-    writer.writerows(all_bookings())
-    response = make_response(output.getvalue())
-    response.headers["Content-Disposition"] = "attachment; filename=acop_bookings.csv"
-    response.headers["Content-type"] = "text/csv"
-    return response
+    rows = all_bookings()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["ID","Name","Email","Phone","Date","Time","CreatedAt"])
+    for r in rows:
+        w.writerow(r)
+    data = buf.getvalue().encode('utf-8')
+    return send_file(io.BytesIO(data), download_name="acop_bookings.csv", as_attachment=True, mimetype="text/csv")
 
-@app.route("/admin/toggle_block", methods=["POST"])
-def toggle_block():
-    try:
-        data = request.get_json() or {}
-        date = data.get("date")
-        if not date:
-            return jsonify({"error": "no date"}), 400
-
-        with sqlite3.connect(DB_FILE) as conn:
-            # Check if date is inside any blocked range → remove whole range
-            cur = conn.execute("SELECT start_date, end_date FROM blocked_ranges")
-            for start, end in cur.fetchall():
-                if start <= date <= end:
-                    conn.execute("DELETE FROM blocked_ranges WHERE start_date=? AND end_date=?", (start, end))
-                    conn.commit()
-                    return jsonify({"status": "unblocked"})
-
-            # Not blocked → block single day
-            conn.execute("INSERT INTO blocked_ranges (start_date, end_date) VALUES (?, ?)", (date, date))
-            conn.commit()
-            return jsonify({"status": "blocked"})
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.context_processor
-def inject_calendar():
-    return dict(calendar_days=get_calendar_month())
-
-@app.route("/admin/settings", methods=["GET", "POST"])
+@app.route("/admin/settings", methods=["GET","POST"])
 @require_admin
 def admin_settings():
-    conn = sqlite3.connect(DB_FILE)
-    cur = conn.cursor()
-    cur.execute("SELECT email_per_booking, attach_csv, teams_enabled, teams_webhook FROM admin_settings WHERE id=1")
-    row = cur.fetchone()
-    if not row:
-        row = (1, 1, 1, "")
-
     if request.method == "POST":
-        email_on = 1 if request.form.get("email_per_booking") else 0
-        csv_on = 1 if request.form.get("attach_csv") else 0
-        teams_on = 1 if request.form.get("teams_enabled") else 0
-        webhook = request.form.get("teams_webhook", "").strip()
+        update_settings(
+            email_per_booking = "email_per_booking" in request.form,
+            attach_csv = "attach_csv" in request.form,
+            daily_summary = "daily_summary" in request.form,
+            weekly_summary = "weekly_summary" in request.form,
+            teams_enabled = "teams_enabled" in request.form,
+            teams_webhook = request.form.get("teams_webhook","").strip()
+        )
+        flash("Settings saved")
+        return redirect(url_for("admin_settings"))
+    settings = get_settings()
+    return render_template("admin_settings.html", settings=settings)
 
-        conn.execute("""UPDATE admin_settings SET 
-                     email_per_booking=?, attach_csv=?, teams_enabled=?, teams_webhook=?
-                     WHERE id=1""", (email_on, csv_on, teams_on, webhook))
-        conn.commit()
-        flash("Settings saved!")
-        # Update global webhook
-        global TEAMS_WEBHOOK
-        TEAMS_WEBHOOK = webhook if teams_on else ""
-
-    conn.close()
-    return render_template("admin_settings.html",
-                         email_per_booking=row[0],
-                         attach_csv=row[1],
-                         teams_enabled=row[2],
-                         teams_webhook=row[3])
-
-@app.route("/admin/test_email", methods=["POST"])
+@app.route("/admin/test-email")
 @require_admin
-def test_email():
-    send_email(ADMIN_EMAIL, "ACOP Test Email", "This is a test – everything is working!", 
-               "<h3>Test Email</h3><p>If you see this, emails are working perfectly.</p>")
-    return "sent"
+def admin_test_email():
+    ok = send_email_with_attachments(ADMIN_EMAIL, "ACOP Test Email", "This is a test email from ACOP booking system.")
+    return "Test email sent." if ok else "Test email failed."
 
-@app.route("/admin/test_teams", methods=["POST"])
+@app.route("/admin/test-teams")
 @require_admin
-def test_teams():
-    webhook = request.form.get("teams_webhook") or TEAMS_WEBHOOK
-    if webhook:
-        requests.post(webhook, json={"text": "ACOP Test Message – Teams is connected!"}, timeout=5)
-    return "sent"
+def admin_test_teams():
+    settings = get_settings()
+    webhook = settings.get("teams_webhook") or TEAMS_WEBHOOK_ENV
+    if not webhook:
+        return "No Teams webhook configured."
+    ok = post_to_teams(webhook, "ACOP Chatbot Test message")
+    return "Test teams sent." if ok else "Test teams failed."
 
-# ==================== CHATBOT ====================
+# ---------- Chat endpoints ----------
 @app.route("/")
 def index():
+    # serve the index from templates/index.html that you pasted earlier
     return render_template("index.html")
 
 @app.route("/api/message", methods=["POST"])
 def api_message():
-    data = request.get_json() or {}
-    msg = data.get("message", "").strip().lower()
-    sid = data.get("session_id") or request.cookies.get("sid") or str(uuid.uuid4())
-    S = app.chat_sessions.setdefault(sid, {"stage": "name"})
-    reply = ""
+    try:
+        data = request.get_json(silent=True) or {}
+        raw = data.get("message", "")
+        if raw is None:
+            raw = ""
+        msg = raw.strip()
+        sid = data.get("session_id") or request.cookies.get("sid") or str(uuid.uuid4())
 
-    if msg == "cancel" and S.get("date"):
-        conn = sqlite3.connect(DB_FILE)
-        conn.execute("DELETE FROM bookings WHERE email=? AND date=?", (S.get("email",""), S.get("date","")))
-        conn.commit()
-        conn.close()
-        S.clear()
-        S["stage"] = "name"
-        reply = "Booking cancelled. Hi! What's your name?"
+        state = load_session(sid)
+        if "stage" not in state:
+            state["stage"] = "name"
 
-    elif S["stage"] == "name":
-        if len(msg) < 2 or any(c.isdigit() for c in msg):
-            reply = "Please enter a valid name."
-        else:
-            S["name"] = msg.title()
-            S["stage"] = "email"
-            reply = f"Thanks {S['name']}! What's your email?"
+        reply = ""
 
-    elif S["stage"] == "email":
-        if "@" not in msg or "." not in msg:
-            reply = "Please enter a valid email."
-        else:
-            S["email"] = msg
-            S["stage"] = "phone"
-            reply = "Your phone number?"
+        # cancel
+        if msg.lower() == "cancel" and state.get("date"):
+            conn = get_conn(); cur = conn.cursor()
+            cur.execute("DELETE FROM bookings WHERE email=? AND date=?", (state.get("email"), state.get("date")))
+            conn.commit(); conn.close()
+            state = {"stage": "name"}
+            save_session(sid, state)
+            reply = "Booking cancelled. Hi — what's your name?"
+            resp = make_response(jsonify({"reply": reply, "session_id": sid}))
+            resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
+            return resp
 
-    elif S["stage"] == "phone":
-        cleaned = "".join(c for c in msg if c.isdigit() or c in "+- ")
-        if len(cleaned) < 8:
-            reply = "Please enter a valid phone number (e.g. 0412 345 678)."
-        else:
-            S["phone"] = msg.strip()
-            S["stage"] = "date"
-            reply = "Great! Which date would you like?\nPlease use DD/MM/YYYY format (e.g. 15/01/2026)"
-
-    elif S["stage"] == "date":
-        try:
-            d = datetime.strptime(msg.strip(), "%d/%m/%Y")
-            date_str = d.strftime("%Y-%m-%d")
-
-            if is_past(date_str):
-                reply = "That date is in the past.\n\n" + find_next_available_days()
-            elif d.weekday() >= 5:
-                reply = "We are closed on weekends.\n\n" + find_next_available_days(date_str)
-            elif is_date_blocked(date_str):
-                reply = "That date is not available (office closed or public holiday).\n\n" + find_next_available_days(date_str)
+        # name
+        if state["stage"] == "name":
+            if len(msg) < 2 or any(c.isdigit() for c in msg):
+                reply = "Please enter a valid name."
             else:
-                free = [t for t in TIME_SLOTS if not is_booked(date_str, t)]
-                if not free:
-                    reply = "That day is fully booked.\n\n" + find_next_available_days(date_str)
-                else:
-                    S["date"] = date_str
-                    S["stage"] = "time"
-                    reply = f"Available on {d.strftime('%d %B %Y')}:\n{', '.join(free)}"
+                state["name"] = msg.title()
+                state["stage"] = "email"
+                save_session(sid, state)
+                reply = f"Thanks {state['name']}! What's your email?"
 
-        except ValueError:
-            reply = "Please enter the date in DD/MM/YYYY format (e.g. 15/01/2026)"
-        except ValueError:
-            reply = "Please enter the date in DD/MM/YYYY format (e.g. 15/01/2026)"
+        # email
+        elif state["stage"] == "email":
+            if "@" not in msg or "." not in msg:
+                reply = "Please enter a valid email."
+            else:
+                state["email"] = msg.lower()
+                state["stage"] = "phone"
+                save_session(sid, state)
+                reply = "Your phone number?"
 
-    elif S["stage"] == "time":
-        t = msg.strip().upper().replace(" ", "").replace(".", "")
-        if t in ["9", "9AM", "900"]: t = "09:00"
-        elif t in ["11", "11AM", "1100"]: t = "11:00"
-        elif t in ["330", "3:30", "1530", "15:30"]: t = "15:30"
+        # phone
+        elif state["stage"] == "phone":
+            cleaned = "".join(c for c in msg if c.isdigit() or c in "+ -")
+            if len(cleaned.replace(" ", "").replace("-", "")) < 8:
+                reply = "Please enter a valid phone number."
+            else:
+                state["phone"] = msg
+                state["stage"] = "date"
+                save_session(sid, state)
+                reply = "Which date? (e.g. 27/11/2025)"
 
-        # Re-create the date object (needed for past-time check)
-        try:
-            date_obj = datetime.strptime(S["date"], "%Y-%m-%d")
-            nice_date = date_obj.strftime("%d %B %Y")
-        except:
-            reply = "Error with date. Please start again."
-            S["stage"] = "date"
-        else:
-            if t not in TIME_SLOTS:
+        # date
+        elif state["stage"] == "date":
+            parsed = parse_date_input(msg)
+            if not parsed:
+                reply = "Use DD/MM/YYYY, DD-MM-YYYY, or YYYY-MM-DD."
+            else:
+                try:
+                    dobj = datetime.strptime(parsed, "%Y-%m-%d")
+                    if dobj.weekday() >= 5 or is_past(parsed):
+                        reply = "Please pick a future weekday (Mon-Fri)."
+                    else:
+                        state["date"] = parsed
+                        free = [t for t in TIME_SLOTS if not is_booked(parsed, t)]
+                        if not free:
+                            reply = "That day is fully booked. Choose another date."
+                        else:
+                            state["stage"] = "time"
+                            state["available"] = free
+                            save_session(sid, state)
+                            human = dobj.strftime("%d %B %Y")
+                            reply = f"Available on {human}: {', '.join(free)}"
+                except Exception:
+                    reply = "Invalid date — use DD/MM/YYYY."
+
+        # time
+        elif state["stage"] == "time":
+            normalized = normalize_time(msg)
+            if not normalized:
                 reply = f"Please choose from: {', '.join(TIME_SLOTS)}"
-            elif is_booked(S["date"], t):
-                reply = "That time was just taken. Please choose another."
-            elif is_same_day_cutoff_passed(S["date"], t):
-                reply = f"Sorry, bookings for {t} today require at least 2 hours notice.\nPlease choose a later time or another day."
-            elif is_slot_past_today(S["date"], t):
-                reply = f"The {t} slot on {nice_date} has already passed.\n\n" + find_next_available_days()
+            elif is_booked(state.get("date"), normalized):
+                reply = "That time is now taken. Please choose another."
             else:
-                # SUCCESS — book it
-                bid = save_booking(S["name"], S["email"], S["phone"], S["date"], t)
-                send_confirmation(S["name"], S["email"], S["phone"], S["date"], t)
-                notify_admin(all_bookings()[-1])
-                reply = f"Confirmed! Your call is on {nice_date} at {t}\n\nType 'cancel' to change."
-                app.chat_sessions.pop(sid, None)
-    resp = make_response(jsonify({"reply": reply}))
-    resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
-    return resp
+                bid = save_booking(state.get("name"), state.get("email"), state.get("phone"), state.get("date"), normalized)
+                booking_row = get_booking(bid)
+                # attempt notifications but never crash user flow
+                try:
+                    send_confirmation_email(state.get("name"), state.get("email"), state.get("phone"), state.get("date"), normalized)
+                except Exception as e:
+                    app.logger.exception("Confirmation email failed: %s", e)
+                try:
+                    notify_on_booking(booking_row)
+                except Exception as e:
+                    app.logger.exception("Admin notify failed: %s", e)
+                human = datetime.strptime(state.get("date"), "%Y-%m-%d").strftime("%d %B %Y")
+                reply = f"Confirmed! Your call is on {human} at {normalized}\n\nType 'cancel' to change it."
+                delete_session(sid)
 
-# === FINAL COMPACT & 100% CORRECT CALENDAR (NO SYNTAX ERROR) ===
-from datetime import datetime, timedelta
+        else:
+            reply = "Sorry — something went wrong. Please try again."
 
-def get_one_month(year, month, offset=0):
-    m = month + offset
-    y = year
-    while m < 1:
-        m += 12; y -= 1
-    while m > 12:
-        m -= 12; y += 1
+        save_session(sid, state)
+        resp = make_response(jsonify({"reply": reply, "session_id": sid}))
+        resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
+        return resp
 
-    first = datetime(y, m, 1)
-    start = first - timedelta(days=first.weekday())   # Monday start — perfect
+    except Exception as e:
+        app.logger.exception("Error in chat flow: %s", e)
+        return jsonify({"reply": "Server error. Please try again."}), 500
 
-    days = []
-    for i in range(42):
-        day = start + timedelta(days=i)
-        days.append({
-            "date": day.strftime("%Y-%m-%d"),
-            "num": day.day if day.month == m else "",
-            "blocked": is_date_blocked(day.strftime("%Y-%m-%d"))
-        })
-    return {"name": first.strftime("%B %Y"), "days": days}
-
-def get_three_months():
-    now = datetime.now()
-    return [
-        get_one_month(now.year, now.month, 0),   # current month
-        get_one_month(now.year, now.month, 1),   # next month
-        get_one_month(now.year, now.month, 2)    # month after next
-    ]
-
-@app.context_processor
-def inject_calendar():
-    return dict(calendar_months=get_three_months())
-
+# ---------- Run ----------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
+    port = int(os.environ.get("PORT", 5000))
+    # debug False for Render production
+    app.run(host="0.0.0.0", port=port, debug=False)
