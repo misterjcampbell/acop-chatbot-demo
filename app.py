@@ -147,6 +147,37 @@ def unblock_range(start_date, end_date):
     conn.execute("DELETE FROM blocked_dates WHERE date BETWEEN ? AND ?", (start_date, end_date))
     conn.commit(); conn.close()
 
+def next_available_dates(start_date_iso, count=3):
+    """
+    Finds the next `count` dates that are:
+    - Not blocked
+    - Not weekends
+    - Not in the past
+    - Have at least 1 free slot
+    Returns a list of ISO date strings.
+    """
+    results = []
+    d = datetime.strptime(start_date_iso, "%Y-%m-%d").date()
+
+    # Begin checking from the next day *if* the date itself is invalid
+    # Otherwise the logic calling this function will decide.
+    for _ in range(365):  # safety upper bound
+        d_str = d.isoformat()
+
+        if (not is_weekend(d_str)
+            and not is_past_date(d_str)
+            and d_str not in get_blocked_dates()):
+
+            free = [t for t in TIME_SLOTS if not is_booked(d_str, t)]
+            if free:
+                results.append(d_str)
+                if len(results) >= count:
+                    return results
+
+        d = d + timedelta(days=1)
+
+    return results
+
 # ---------------- Bookings ----------------
 def all_bookings(start=None, end=None):
     conn = get_conn(); cur = conn.cursor()
@@ -442,15 +473,59 @@ def api_message():
                 reply = "Use DD/MM/YYYY or YYYY-MM-DD."
             else:
                 if is_weekend(parsed):
-                    reply = "Bookings are only available on weekdays (Mon–Fri)."
+next3 = next_available_dates(parsed)
+if next3:
+    pretty = [datetime.strptime(d, "%Y-%m-%d").strftime("%d %B %Y") for d in next3]
+    reply = (
+        "Bookings are only available on weekdays (Mon–Fri).\n\n"
+        "Next available dates:\n" +
+        "\n".join(f"- {p}" for p in pretty)
+    )
+else:
+    reply = (
+        "Bookings are only available on weekdays (Mon–Fri) and no future dates are currently open."
+    )
                 elif is_past_date(parsed):
-                    reply = "You cannot book a past date."
-                elif parsed in get_blocked_dates():
-                    reply = "That date is not available. Choose another date."
+next3 = next_available_dates(datetime.now(LOCAL_TZ).date().isoformat())
+pretty = [datetime.strptime(d, "%Y-%m-%d").strftime("%d %B %Y") for d in next3]
+reply = (
+    "You cannot book a past date.\n\n"
+    "Next available dates:\n" +
+    "\n".join(f"- {p}" for p in pretty)
+)
+elif parsed in get_blocked_dates():
+    # Show next 3 available dates
+    next3 = next_available_dates(parsed)
+    if next3:
+        pretty = [datetime.strptime(d, "%Y-%m-%d").strftime("%d %B %Y") for d in next3]
+        reply = (
+            "That date is not available.\n\n"
+            "Next available dates:\n" +
+            "\n".join(f"- {p}" for p in pretty)
+        )
+    else:
+        reply = (
+            "That date is not available and no future dates are currently open.\n"
+            "Please check back later."
+        )
+
                 else:
                     free = [t for t in TIME_SLOTS if not is_booked(parsed, t)]
-                    if not free:
-                        reply = "That day is fully booked. Choose another date."
+if not free:
+    next3 = next_available_dates(parsed)
+    if next3:
+        pretty = [datetime.strptime(d, "%Y-%m-%d").strftime("%d %B %Y") for d in next3]
+        reply = (
+            "That day is fully booked.\n\n"
+            "Next available dates:\n" +
+            "\n".join(f"- {p}" for p in pretty)
+        )
+    else:
+        reply = (
+            "That day is fully booked and no future dates are currently open.\n"
+            "Please check back later."
+        )
+
                     else:
                         state["date"] = parsed; state["stage"] = "time"; state["available"] = free; save_session(sid, state)
                         human = datetime.strptime(parsed, "%Y-%m-%d").strftime("%d %B %Y")
