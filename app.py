@@ -1,9 +1,9 @@
-# app.py — ACOP Booking Chatbot (Final, Option 2 — ACOP Corporate FullCalendar)
+# app.py — ACOP Booking Chatbot (Patched, Full - Option B)
 import os
 import re
 import io
-import json
 import csv
+import json
 import uuid
 import sqlite3
 import smtplib
@@ -27,67 +27,79 @@ CORS(app)
 
 DB_FILE = os.getenv("DB_FILE", "bookings.db")
 LOCAL_TZ = pytz.timezone(os.getenv("LOCAL_TZ", "Australia/Sydney"))
-TIME_SLOTS = ["09:00", "11:00", "15:30"]
-LEAD_TIME_MINUTES = int(os.getenv("LEAD_TIME_MINUTES", "120"))
 
-# Mailtrap defaults (override in Render env)
+# Time slots and lead time
+TIME_SLOTS = ["09:00", "11:00", "15:30"]
+LEAD_TIME_MINUTES = int(os.getenv("LEAD_TIME_MINUTES", "120"))  # e.g. 120 minutes
+
+# SMTP / Mailtrap defaults (override via Render env)
 SMTP_HOST = os.getenv("SMTP_HOST", "sandbox.smtp.mailtrap.io")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "2525"))
 SMTP_USER = os.getenv("SMTP_USER", "17d873b3a11a38")
 SMTP_PASS = os.getenv("SMTP_PASS", "453b9c740a0729")
 FROM_EMAIL = os.getenv("FROM_EMAIL", "enquiries@acop.edu.au")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "johnc@acop.edu.au")
+
+# Teams
 TEAMS_WEBHOOK_ENV = os.getenv("TEAMS_WEBHOOK", "")
 
+# Admin credentials
 ADMIN_USER = os.getenv("ADMIN_USER", "Admin")
 ADMIN_PASS = os.getenv("ADMIN_PASS", "Acop2025!")
 
-# ---------------- DB init ----------------
+# ---------------- DB helpers & init ----------------
 def get_conn():
     return sqlite3.connect(DB_FILE)
 
 def init_db():
-    conn = get_conn(); cur = conn.cursor()
+    conn = get_conn()
+    cur = conn.cursor()
+
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS bookings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT NOT NULL,
-            phone TEXT NOT NULL,
-            date TEXT NOT NULL,
-            time TEXT NOT NULL,
-            created_at TEXT NOT NULL
-        )
+    CREATE TABLE IF NOT EXISTS bookings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        date TEXT NOT NULL,
+        time TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )
     """)
+
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS admin_settings (
-            id INTEGER PRIMARY KEY,
-            email_per_booking INTEGER DEFAULT 1,
-            attach_csv INTEGER DEFAULT 1,
-            daily_summary INTEGER DEFAULT 1,
-            weekly_summary INTEGER DEFAULT 1,
-            teams_enabled INTEGER DEFAULT 1,
-            teams_webhook TEXT DEFAULT ''
-        )
+    CREATE TABLE IF NOT EXISTS admin_settings (
+        id INTEGER PRIMARY KEY,
+        email_per_booking INTEGER DEFAULT 1,
+        attach_csv INTEGER DEFAULT 1,
+        daily_summary INTEGER DEFAULT 1,
+        weekly_summary INTEGER DEFAULT 1,
+        teams_enabled INTEGER DEFAULT 1,
+        teams_webhook TEXT DEFAULT ''
+    )
     """)
     cur.execute("INSERT OR IGNORE INTO admin_settings (id) VALUES (1)")
+
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS blocked_dates (
-            date TEXT PRIMARY KEY
-        )
+    CREATE TABLE IF NOT EXISTS blocked_dates (
+        date TEXT PRIMARY KEY
+    )
     """)
+
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS chat_sessions (
-            sid TEXT PRIMARY KEY,
-            state TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+        sid TEXT PRIMARY KEY,
+        state TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )
     """)
-    conn.commit(); conn.close()
+
+    conn.commit()
+    conn.close()
 
 init_db()
 
-# ---------------- Settings helpers ----------------
+# ---------------- Settings ----------------
 def get_settings():
     conn = get_conn(); cur = conn.cursor()
     cur.execute("SELECT email_per_booking,attach_csv,daily_summary,weekly_summary,teams_enabled,teams_webhook FROM admin_settings WHERE id=1")
@@ -110,11 +122,15 @@ def update_settings(**kwargs):
         if k in kwargs:
             sets.append(f"{k}=?")
             v = kwargs[k]
-            params.append(1 if isinstance(v,bool) and v else (0 if isinstance(v,bool) else v))
-    if sets:
-        sql = "UPDATE admin_settings SET " + ", ".join(sets) + " WHERE id=1"
-        conn = get_conn(); cur = conn.cursor()
-        cur.execute(sql, params); conn.commit(); conn.close()
+            if isinstance(v, bool):
+                params.append(1 if v else 0)
+            else:
+                params.append(v)
+    if not sets:
+        return
+    sql = "UPDATE admin_settings SET " + ", ".join(sets) + " WHERE id=1"
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute(sql, params); conn.commit(); conn.close()
 
 # ---------------- Blocked dates ----------------
 def get_blocked_dates():
@@ -147,37 +163,6 @@ def unblock_range(start_date, end_date):
     conn.execute("DELETE FROM blocked_dates WHERE date BETWEEN ? AND ?", (start_date, end_date))
     conn.commit(); conn.close()
 
-def next_available_dates(start_date_iso, count=3):
-    """
-    Finds the next `count` dates that are:
-    - Not blocked
-    - Not weekends
-    - Not in the past
-    - Have at least 1 free slot
-    Returns a list of ISO date strings.
-    """
-    results = []
-    d = datetime.strptime(start_date_iso, "%Y-%m-%d").date()
-
-    # Begin checking from the next day *if* the date itself is invalid
-    # Otherwise the logic calling this function will decide.
-    for _ in range(365):  # safety upper bound
-        d_str = d.isoformat()
-
-        if (not is_weekend(d_str)
-            and not is_past_date(d_str)
-            and d_str not in get_blocked_dates()):
-
-            free = [t for t in TIME_SLOTS if not is_booked(d_str, t)]
-            if free:
-                results.append(d_str)
-                if len(results) >= count:
-                    return results
-
-        d = d + timedelta(days=1)
-
-    return results
-
 # ---------------- Bookings ----------------
 def all_bookings(start=None, end=None):
     conn = get_conn(); cur = conn.cursor()
@@ -194,8 +179,7 @@ def is_booked(date_str, time_str):
 
 def save_booking(name, email, phone, date_str, time_str):
     conn = get_conn(); cur = conn.cursor()
-    cur.execute("INSERT INTO bookings (name,email,phone,date,time,created_at) VALUES (?,?,?,?,?,?)",
-                (name, email, phone, date_str, time_str, datetime.now(LOCAL_TZ).isoformat()))
+    cur.execute("INSERT INTO bookings (name,email,phone,date,time,created_at) VALUES (?,?,?,?,?,?)", (name, email, phone, date_str, time_str, datetime.now(LOCAL_TZ).isoformat()))
     conn.commit(); bid = cur.lastrowid; conn.close(); return bid
 
 def get_booking(bid):
@@ -238,10 +222,12 @@ def parse_date(s):
     return None
 
 def is_weekend(date_iso):
-    d = datetime.strptime(date_iso, "%Y-%m-%d").date(); return d.weekday() >= 5
+    d = datetime.strptime(date_iso, "%Y-%m-%d").date()
+    return d.weekday() >= 5
 
 def is_past_date(date_iso):
-    d = datetime.strptime(date_iso, "%Y-%m-%d").date(); return d < datetime.now(LOCAL_TZ).date()
+    d = datetime.strptime(date_iso, "%Y-%m-%d").date()
+    return d < datetime.now(LOCAL_TZ).date()
 
 def meets_lead_time(date_iso, time_str):
     appt = datetime.strptime(f"{date_iso} {time_str}", "%Y-%m-%d %H:%M")
@@ -249,6 +235,28 @@ def meets_lead_time(date_iso, time_str):
     now = datetime.now(LOCAL_TZ)
     diff = (appt - now).total_seconds() / 60.0
     return diff >= LEAD_TIME_MINUTES
+
+# ---------------- Next available dates helper ----------------
+def next_available_dates(start_date_iso, count=3):
+    results = []
+    try:
+        d = datetime.strptime(start_date_iso, "%Y-%m-%d").date()
+    except:
+        d = datetime.now(LOCAL_TZ).date()
+    # if start_date is today or future, begin search the next day if start is blocked/invalid
+    # We'll iterate up to 1 year to be safe
+    for _ in range(365):
+        d_str = d.isoformat()
+        if (not is_weekend(d_str)
+            and not is_past_date(d_str)
+            and d_str not in get_blocked_dates()):
+            free = [t for t in TIME_SLOTS if not is_booked(d_str, t)]
+            if free:
+                results.append(d_str)
+                if len(results) >= count:
+                    return results
+        d = d + timedelta(days=1)
+    return results
 
 # ---------------- Email & Teams ----------------
 def send_email_with_attachments(to_email, subject, plain_text, html=None, attachments=None):
@@ -262,16 +270,19 @@ def send_email_with_attachments(to_email, subject, plain_text, html=None, attach
                 maintype = "text" if subtype == "csv" else "application"
                 msg.add_attachment(data_bytes, maintype=maintype, subtype=subtype, filename=fname)
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-            s.login(SMTP_USER, SMTP_PASS); s.send_message(msg)
+            s.login(SMTP_USER, SMTP_PASS)
+            s.send_message(msg)
         return True
     except Exception as e:
-        app.logger.exception("email failed: %s", e); return False
+        app.logger.exception("email failed: %s", e)
+        return False
 
 def send_confirmation_email(name, email, phone, date_iso, time_str):
     pretty = datetime.strptime(date_iso, "%Y-%m-%d").strftime("%d %B %Y")
     subj = "Your ACOP Assessment Call is Confirmed"
     text = f"Hi {name},\n\nYour call is on {pretty} at {time_str}.\n\n— ACOP Team"
     html = f"<h3>Hi {name}!</h3><p>Your call is on <strong>{pretty} at {time_str}</strong>.</p>"
+    # ICS
     try:
         dt = datetime.strptime(f"{date_iso} {time_str}", "%Y-%m-%d %H:%M"); dt = LOCAL_TZ.localize(dt)
         cal = Calendar(); cal.add('prodid','-//ACOP//'); cal.add('version','2.0')
@@ -306,11 +317,13 @@ def require_admin(fn):
 
 @app.route("/admin/login", methods=["GET","POST"])
 def admin_login():
-    if session.get("admin_logged_in"): return redirect(url_for("admin"))
+    if session.get("admin_logged_in"):
+        return redirect(url_for("admin"))
     error = None
     if request.method == "POST":
         if request.form.get("username") == ADMIN_USER and request.form.get("password") == ADMIN_PASS:
-            session["admin_logged_in"] = True; session["admin_username"] = request.form.get("username")
+            session["admin_logged_in"] = True
+            session["admin_username"] = request.form.get("username")
             return redirect(url_for("admin"))
         error = "Invalid credentials"; flash(error)
     return render_template("admin_login.html", error=error)
@@ -335,7 +348,7 @@ def admin_events():
         start = f"{r[4]}T{r[5]}:00"
         events.append({"id": f"b{r[0]}", "title": f"{r[1]} ({r[5]})", "start": start, "allDay": False, "color": "#004cbf"})
     for d in get_blocked_dates():
-        events.append({"id": f"x{d}", "title": "Blocked", "start": f"{d}T00:00:00", "allDay": True, "display": "background", "color": "#ffcccc"})
+        events.append({"id": f"x{d}", "title": "Blocked", "start": f"{d}T00:00:00", "allDay": True, "display": "background", "color": "#ffdddd"})
     return jsonify(events)
 
 @app.route("/admin/toggle-date", methods=["POST"])
@@ -352,14 +365,29 @@ def admin_toggle_range():
     data = request.get_json() or {}
     start = data.get("start"); end = data.get("end"); action = data.get("action","block")
     if not start or not end: return jsonify({"ok": False}), 400
-    # FullCalendar uses exclusive end in some cases; ensure inclusive handling
-    # Normalize end to previous day if needed
-    # We'll block/unblock inclusive
-    # If end includes time or is next day, accept as iso date and use it directly
     if action == "block":
         block_range(start, end)
     else:
         unblock_range(start, end)
+    return jsonify({"ok": True})
+
+# Mode B endpoints: admin selects a date in the calendar UI and then presses a button to block/unblock
+@app.route("/admin/block-selected", methods=["POST"])
+@require_admin
+def admin_block_selected():
+    data = request.get_json() or {}
+    date = data.get("date")
+    if not date: return jsonify({"ok": False, "error":"missing date"}), 400
+    block_range(date, date)
+    return jsonify({"ok": True})
+
+@app.route("/admin/unblock-selected", methods=["POST"])
+@require_admin
+def admin_unblock_selected():
+    data = request.get_json() or {}
+    date = data.get("date")
+    if not date: return jsonify({"ok": False, "error":"missing date"}), 400
+    unblock_range(date, date)
     return jsonify({"ok": True})
 
 @app.route("/admin/delete-booking/<int:bid>", methods=["POST"])
@@ -403,13 +431,17 @@ def admin_test_teams():
     try: requests.post(webhook, json={"text":"ACOP test message"}, timeout=6); return "OK"
     except: return "FAIL"
 
-# ---------------- Chat sessions persisted ----------------
+# ---------------- Chat session persistence ----------------
 def load_session(sid):
     conn = get_conn(); cur = conn.cursor()
-    cur.execute("SELECT state FROM chat_sessions WHERE sid=?", (sid,)); row = cur.fetchone(); conn.close()
-    if not row: return {"stage":"name"}
-    try: return json.loads(row[0])
-    except: return {"stage":"name"}
+    cur.execute("SELECT state FROM chat_sessions WHERE sid=?", (sid,))
+    row = cur.fetchone(); conn.close()
+    if not row:
+        return {"stage":"name"}
+    try:
+        return json.loads(row[0])
+    except:
+        return {"stage":"name"}
 
 def save_session(sid, state):
     now = datetime.now(LOCAL_TZ).isoformat(); text = json.dumps(state)
@@ -422,7 +454,8 @@ def delete_session(sid):
 
 # ---------------- Chat API (enforce rules) ----------------
 @app.route("/")
-def index(): return render_template("index.html")
+def index():
+    return render_template("index.html")
 
 @app.route("/api/message", methods=["POST"])
 def api_message():
@@ -436,6 +469,7 @@ def api_message():
         if "stage" not in state: state["stage"] = "name"
         reply = ""
 
+        # cancel
         if msg.lower() == "cancel" and state.get("date"):
             conn = get_conn(); cur = conn.cursor()
             cur.execute("DELETE FROM bookings WHERE email=? AND date=?", (state.get("email"), state.get("date")))
@@ -473,59 +507,34 @@ def api_message():
                 reply = "Use DD/MM/YYYY or YYYY-MM-DD."
             else:
                 if is_weekend(parsed):
-next3 = next_available_dates(parsed)
-if next3:
-    pretty = [datetime.strptime(d, "%Y-%m-%d").strftime("%d %B %Y") for d in next3]
-    reply = (
-        "Bookings are only available on weekdays (Mon–Fri).\n\n"
-        "Next available dates:\n" +
-        "\n".join(f"- {p}" for p in pretty)
-    )
-else:
-    reply = (
-        "Bookings are only available on weekdays (Mon–Fri) and no future dates are currently open."
-    )
+                    # suggest next 3 available
+                    next3 = next_available_dates(parsed)
+                    if next3:
+                        pretty = [datetime.strptime(d, "%Y-%m-%d").strftime("%d %B %Y") for d in next3]
+                        reply = "Bookings are only available on weekdays (Mon–Fri).\n\nNext available dates:\n" + "\n".join(f"- {p}" for p in pretty)
+                    else:
+                        reply = "Bookings are only available on weekdays (Mon–Fri) and no future dates are currently open."
                 elif is_past_date(parsed):
-next3 = next_available_dates(datetime.now(LOCAL_TZ).date().isoformat())
-pretty = [datetime.strptime(d, "%Y-%m-%d").strftime("%d %B %Y") for d in next3]
-reply = (
-    "You cannot book a past date.\n\n"
-    "Next available dates:\n" +
-    "\n".join(f"- {p}" for p in pretty)
-)
-elif parsed in get_blocked_dates():
-    # Show next 3 available dates
-    next3 = next_available_dates(parsed)
-    if next3:
-        pretty = [datetime.strptime(d, "%Y-%m-%d").strftime("%d %B %Y") for d in next3]
-        reply = (
-            "That date is not available.\n\n"
-            "Next available dates:\n" +
-            "\n".join(f"- {p}" for p in pretty)
-        )
-    else:
-        reply = (
-            "That date is not available and no future dates are currently open.\n"
-            "Please check back later."
-        )
-
+                    next3 = next_available_dates(datetime.now(LOCAL_TZ).date().isoformat())
+                    pretty = [datetime.strptime(d, "%Y-%m-%d").strftime("%d %B %Y") for d in next3]
+                    reply = "You cannot book a past date.\n\nNext available dates:\n" + "\n".join(f"- {p}" for p in pretty)
+                elif parsed in get_blocked_dates():
+                    next3 = next_available_dates(parsed)
+                    if next3:
+                        pretty = [datetime.strptime(d, "%Y-%m-%d").strftime("%d %B %Y") for d in next3]
+                        reply = "That date is not available.\n\nNext available dates:\n" + "\n".join(f"- {p}" for p in pretty)
+                    else:
+                        reply = "That date is not available. No future dates currently open."
                 else:
+                    # enforce lead time for same-day late bookings: handled later when selecting time, but we can also present slots now
                     free = [t for t in TIME_SLOTS if not is_booked(parsed, t)]
-if not free:
-    next3 = next_available_dates(parsed)
-    if next3:
-        pretty = [datetime.strptime(d, "%Y-%m-%d").strftime("%d %B %Y") for d in next3]
-        reply = (
-            "That day is fully booked.\n\n"
-            "Next available dates:\n" +
-            "\n".join(f"- {p}" for p in pretty)
-        )
-    else:
-        reply = (
-            "That day is fully booked and no future dates are currently open.\n"
-            "Please check back later."
-        )
-
+                    if not free:
+                        next3 = next_available_dates(parsed)
+                        if next3:
+                            pretty = [datetime.strptime(d, "%Y-%m-%d").strftime("%d %B %Y") for d in next3]
+                            reply = "That day is fully booked.\n\nNext available dates:\n" + "\n".join(f"- {p}" for p in pretty)
+                        else:
+                            reply = "That day is fully booked and no future dates are currently open."
                     else:
                         state["date"] = parsed; state["stage"] = "time"; state["available"] = free; save_session(sid, state)
                         human = datetime.strptime(parsed, "%Y-%m-%d").strftime("%d %B %Y")
@@ -538,14 +547,30 @@ if not free:
             elif is_booked(state.get("date"), tnorm):
                 reply = "That time is now taken. Please choose another."
             elif not meets_lead_time(state.get("date"), tnorm):
-                reply = f"Too late to book that time — you need at least {LEAD_TIME_MINUTES} minutes notice."
+                # suggest next available dates/times
+                next3 = next_available_dates(state.get("date"))
+                if next3:
+                    pretty = []
+                    for d in next3:
+                        free = [t for t in TIME_SLOTS if not is_booked(d, t)]
+                        if free:
+                            pretty.append(f"{datetime.strptime(d, '%Y-%m-%d').strftime('%d %B %Y')} — {', '.join(free)}")
+                            if len(pretty) >= 3:
+                                break
+                    reply = f"Too late to book that time — you need at least {LEAD_TIME_MINUTES} minutes notice.\n\nNext available:\n" + "\n".join(f"- {p}" for p in pretty)
+                else:
+                    reply = f"Too late to book that time — you need at least {LEAD_TIME_MINUTES} minutes notice. No other dates currently available."
             else:
                 bid = save_booking(state.get("name"), state.get("email"), state.get("phone"), state.get("date"), tnorm)
                 booking_row = get_booking(bid)
-                try: send_confirmation_email(state.get("name"), state.get("email"), state.get("phone"), state.get("date"), tnorm)
-                except: app.logger.exception("confirmation failed")
-                try: notify_on_booking(booking_row)
-                except: app.logger.exception("notify failed")
+                try:
+                    send_confirmation_email(state.get("name"), state.get("email"), state.get("phone"), state.get("date"), tnorm)
+                except Exception:
+                    app.logger.exception("confirmation email failed")
+                try:
+                    notify_on_booking(booking_row)
+                except Exception:
+                    app.logger.exception("admin notify failed")
                 human = datetime.strptime(state.get("date"), "%Y-%m-%d").strftime("%d %B %Y")
                 reply = f"Confirmed! Your call is on {human} at {tnorm}\n\nType 'cancel' to change."
                 delete_session(sid)
