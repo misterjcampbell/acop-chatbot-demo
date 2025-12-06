@@ -5,35 +5,49 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Admin Settings • ACOP Booking</title>
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="/static/admin.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/admin.css" />
 
   <style>
-    .toast-container {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      z-index: 2000;
+    .settings-container {
+      max-width: 700px;
+      margin: 40px auto;
+      background: #fff;
+      border-radius: 14px;
+      padding: 30px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.06);
     }
-    .toast-success {
-      background: #e7fbea;
-      border-left: 5px solid #1f7a36;
-      padding: 12px 16px;
-      border-radius: 8px;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.08);
-      color: #1f7a36;
-      font-weight: 500;
-      margin-bottom: 10px;
+    h2 {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--acop-navy);
     }
-    .toast-error {
-      background: #fff1f1;
-      border-left: 5px solid #b10000;
-      padding: 12px 16px;
-      border-radius: 8px;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.08);
-      color: #b10000;
+    .toggle-label {
+      font-size: 15px;
+      color: #2d3a4a;
       font-weight: 500;
-      margin-bottom: 10px;
+    }
+    .form-text {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .save-success {
+      padding: 10px;
+      background: #eafbea;
+      border: 1px solid #9dd49d;
+      border-radius: 8px;
+      color: #256d25;
+      display: none;
+      margin-bottom: 12px;
+    }
+    .save-error {
+      padding: 10px;
+      background: #ffe8e8;
+      border: 1px solid #e19a9a;
+      border-radius: 8px;
+      color: #a82d2d;
+      display: none;
+      margin-bottom: 12px;
     }
   </style>
 </head>
@@ -45,6 +59,7 @@
         <img src="/static/acop-logo-small.png" class="brand-logo" alt="ACOP">
         ACOP • Admin
       </a>
+
       <div class="ms-auto">
         <a href="/admin" class="btn btn-outline-primary btn-sm">Dashboard</a>
         <a href="/admin/logout" class="btn btn-danger btn-sm">Logout</a>
@@ -52,110 +67,82 @@
     </div>
   </nav>
 
-  <div class="toast-container" id="toastContainer"></div>
+  <main class="container">
+    <div class="settings-container">
+      <h2 class="mb-3">Admin Settings</h2>
+      <p class="text-muted mb-4">Configure notification settings, Teams integration, and email handling.</p>
 
-  <main class="container admin-container my-4">
-    <h2>Admin Settings</h2>
-    <p class="text-muted">Configure notifications and system behaviour.</p>
+      <div id="saveSuccess" class="save-success">Settings saved successfully ✔</div>
+      <div id="saveError" class="save-error">Failed to save settings. Try again.</div>
 
-    <form id="settingsForm">
-      <div class="card p-4 shadow-sm">
-
-        <h5>Email Notifications</h5>
-        <hr>
-
-        <div class="form-check form-switch mb-3">
-          <input class="form-check-input" type="checkbox" id="email_per_booking" name="email_per_booking"
-                 {% if settings.email_per_booking %}checked{% endif %}>
-          <label class="form-check-label" for="email_per_booking">Send confirmation email to client</label>
+      <form method="POST" id="settingsForm">
+        
+        <!-- EMAIL CONFIRMATION TO CLIENT -->
+        <div class="mb-4">
+          <label class="toggle-label">Send booking confirmation to client?</label>
+          <div class="form-check form-switch mt-1">
+            <input class="form-check-input" type="checkbox" id="clientEmail" name="client_email"
+              {% if settings.client_email %}checked{% endif %}>
+            <label class="form-check-label" for="clientEmail">Enable</label>
+          </div>
+          <div class="form-text">If enabled, clients receive a confirmation email after booking.</div>
         </div>
 
-        <div class="form-check form-switch mb-3">
-          <input class="form-check-input" type="checkbox" id="attach_csv" name="attach_csv"
-                 {% if settings.attach_csv %}checked{% endif %}>
-          <label class="form-check-label" for="attach_csv">Attach CSV to admin emails</label>
+        <!-- MAILTRAP ENABLE/DISABLE -->
+        <div class="mb-4">
+          <label class="toggle-label">Use Mailtrap for all outbound emails?</label>
+          <div class="form-check form-switch mt-1">
+            <input class="form-check-input" type="checkbox" id="mailtrapToggle" name="mailtrap_enabled"
+              {% if settings.mailtrap_enabled %}checked{% endif %}>
+            <label class="form-check-label" for="mailtrapToggle">Mailtrap Enabled</label>
+          </div>
+          <div class="form-text">Recommended for safe testing. Disable only if SMTP is fully configured.</div>
         </div>
 
-        <div class="form-check form-switch mb-3">
-          <input class="form-check-input" type="checkbox" id="daily_summary" name="daily_summary"
-                 {% if settings.daily_summary %}checked{% endif %}>
-          <label class="form-check-label" for="daily_summary">Daily summary email</label>
+        <!-- TEAMS WEBHOOK -->
+        <div class="mb-4">
+          <label class="toggle-label">Microsoft Teams Webhook</label>
+          <input class="form-control" type="text" name="teams_webhook" id="teamsWebhook"
+            placeholder="https://outlook.office.com/webhook/..."
+            value="{{ settings.teams_webhook }}" />
+          <div class="form-text">
+            When enabled, admin will receive Teams notifications for new bookings.
+          </div>
         </div>
 
-        <div class="form-check form-switch mb-3">
-          <input class="form-check-input" type="checkbox" id="weekly_summary" name="weekly_summary"
-                 {% if settings.weekly_summary %}checked{% endif %}>
-          <label class="form-check-label" for="weekly_summary">Weekly summary email</label>
+        <!-- TEST BUTTONS -->
+        <div class="mt-3 d-flex gap-2">
+          <a href="/admin/test-email" class="btn btn-outline-success">Send Test Email</a>
+          <a href="/admin/test-teams" class="btn btn-outline-info">Send Test Teams</a>
         </div>
 
-        <h5 class="mt-4">Microsoft Teams</h5>
-        <hr>
+        <hr class="my-4" />
 
-        <div class="form-check form-switch mb-3">
-          <input class="form-check-input" type="checkbox" id="teams_enabled" name="teams_enabled"
-                 {% if settings.teams_enabled %}checked{% endif %}>
-          <label class="form-check-label" for="teams_enabled">Enable Teams notifications</label>
+        <!-- SAVE BUTTON -->
+        <div class="text-end">
+          <button type="submit" class="btn primary">Save Settings</button>
         </div>
 
-        <div class="mb-3">
-          <label class="form-label">Teams Webhook URL</label>
-          <input type="text" class="form-control" id="teams_webhook" name="teams_webhook"
-                 value="{{ settings.teams_webhook }}">
-        </div>
-
-        <div class="text-end mt-4">
-          <button type="submit" class="btn btn-primary px-4 py-2">Save Settings</button>
-        </div>
-
-      </div>
-    </form>
-
+      </form>
+    </div>
   </main>
 
-<script>
-  const toastContainer = document.getElementById("toastContainer");
+  <script>
+    // Save feedback handling
+    const form = document.getElementById("settingsForm");
+    const successBox = document.getElementById("saveSuccess");
+    const errorBox = document.getElementById("saveError");
 
-  function showToast(message, type = "success") {
-    const div = document.createElement("div");
-    div.className = type === "success" ? "toast-success" : "toast-error";
-    div.textContent = message;
-    toastContainer.appendChild(div);
-    setTimeout(() => div.remove(), 3000);
-  }
+    form.addEventListener("submit", function () {
+      successBox.style.display = "none";
+      errorBox.style.display = "none";
 
-  document.getElementById("settingsForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-
-    const payload = {
-      email_per_booking: document.getElementById("email_per_booking").checked,
-      attach_csv: document.getElementById("attach_csv").checked,
-      daily_summary: document.getElementById("daily_summary").checked,
-      weekly_summary: document.getElementById("weekly_summary").checked,
-      teams_enabled: document.getElementById("teams_enabled").checked,
-      teams_webhook: document.getElementById("teams_webhook").value.trim()
-    };
-
-    try {
-      const res = await fetch("/admin/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        showToast("Settings saved ✔", "success");
-      } else {
-        showToast("Failed to save settings", "error");
-      }
-
-    } catch (err) {
-      console.error(err);
-      showToast("Network or server error", "error");
-    }
-  });
-</script>
+      setTimeout(() => {
+        // After redirect reload, Flask will re-render template.
+        successBox.style.display = "block";
+      }, 300);
+    });
+  </script>
 
 </body>
 </html>
