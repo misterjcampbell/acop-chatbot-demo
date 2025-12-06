@@ -1,0 +1,59 @@
+/* admin.css — Premium ACOP Admin styling (ACOP Corporate colours) */
+
+:root{
+  --acop-blue: #0098ea;
+  --acop-navy: #004cbf;
+  --surface: #ffffff;
+  --muted: #6b7a90;
+  --bg: #f4f7fb;
+  --danger: #e04c4c;
+}
+
+*{box-sizing:border-box}
+body{font-family:Inter, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial; background:var(--bg); color:#233142; margin:0; -webkit-font-smoothing:antialiased}
+
+.acop-topbar{background:transparent;padding:14px 0;border-bottom:1px solid rgba(0,0,0,0.04)}
+.brand-logo{height:28px;margin-right:8px}
+
+/* Container */
+.admin-container{max-width:1100px;margin:28px auto;padding:22px 26px;border-radius:12px;background:var(--surface);box-shadow:0 10px 30px rgba(21,34,56,0.06)}
+
+/* Header */
+h1{font-size:22px;color:var(--acop-navy);margin:0}
+p{margin:0;color:var(--muted)}
+
+/* Toolbar */
+.toolbar{display:flex;align-items:center;justify-content:flex-start;gap:10px;margin-bottom:12px}
+.btn{border-radius:10px;padding:10px 14px;font-size:14px;border:none;cursor:pointer}
+.small-btn{padding:6px 8px;font-size:14px;border-radius:8px}
+.btn.primary{background:var(--acop-navy);color:#fff;box-shadow:0 6px 18px rgba(0,76,191,0.14)}
+.btn.primary-ghost{background:#fff;border:1px solid rgba(0,76,191,0.08);color:var(--acop-navy)}
+.btn.outline{background:#fff;border:1px solid rgba(0,0,0,0.08);color:var(--acop-navy)}
+.btn.secondary{background:#f0f5fb;color:var(--acop-navy)}
+
+/* Prevent sticky active states */
+button:active, a:active { transform: translateY(0.5px); }
+button:focus { outline: none; box-shadow: none; }
+
+/* Calendar container */
+#calendar{width:100%;background:transparent;padding:6px}
+.fc .fc-daygrid-day-number{color:var(--acop-navy);font-weight:600}
+.fc .fc-toolbar-title{font-weight:600;color:var(--acop-navy);font-size:20px}
+
+/* Blocked day background */
+.fc-daygrid-day-blocked .fc-daygrid-day-bg { background: linear-gradient(90deg, rgba(255,108,108,0.08), rgba(255,108,108,0.02)); }
+.fc-daygrid-day-blocked .fc-daygrid-day-number { color: var(--danger); }
+
+/* Booking event style */
+.fc-event { background: var(--acop-navy) !important; border: none !important; color: #fff !important; padding:4px 6px; border-radius:6px; }
+
+/* Responsive tweaks */
+@media (max-width: 880px) {
+  .admin-container{margin:16px;padding:14px}
+  .toolbar{flex-wrap:wrap}
+  #calendar { font-size: 14px; }
+}
+
+/* Bookings table */
+.table thead th{font-weight:700}
+.table tbody tr td{vertical-align:middle}
