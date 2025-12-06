@@ -57,6 +57,18 @@
   }
 
   // init FullCalendar
+  let current = new Date();  // today
+let currentMonth = current.getMonth(); // 0–11
+let currentYear = current.getFullYear();
+function updateMonthLabel() {
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+  document.getElementById("calendar-month").innerText =
+    monthNames[currentMonth] + " " + currentYear;
+}
+
   function initCalendar() {
     const calendarEl = document.getElementById('calendar');
     calendar = new FullCalendar.Calendar(calendarEl, {
@@ -97,6 +109,10 @@ document.getElementById("calendar-month").innerText = monthLabel;
     });
 
     calendar.render();
+   function renderCalendar() {
+  updateMonthLabel();
+  // ... existing calendar cell rendering ...
+}
 
     // prev/next wiring
     prevBtn.addEventListener('click', () => calendar.prev());
