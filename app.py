@@ -405,15 +405,61 @@ def admin_export():
 @app.route("/admin/settings", methods=["GET","POST"])
 @require_admin
 def admin_settings():
-    if request.method == "POST":
-        update_settings(
-            email_per_booking = "email_per_booking" in request.form,
-            attach_csv = "attach_csv" in request.form,
-            daily_summary = "daily_summary" in request.form,
-            weekly_summary = "weekly_summary" in request.form,
-            teams_enabled = "teams_enabled" in request.form,
-            teams_webhook = request.form.get("teams_webhook","").strip()
+    if not session.get("admin"):
+        return redirect("/admin/login")
+
+    if request.method == "GET":
+        # load settings from DB
+        conn = sqlite3.connect(DB)
+        cur = conn.cursor()
+        cur.execute("SELECT key, value FROM settings")
+        rows = cur.fetchall()
+        conn.close()
+
+        settings = {
+            "email_per_booking": False,
+            "attach_csv": False,
+            "daily_summary": False,
+            "weekly_summary": False,
+            "teams_enabled": False,
+            "teams_webhook": "",
+        }
+
+        for k, v in rows:
+            if v.lower() in ("true", "1", "yes"):
+                settings[k] = True
+            else:
+                settings[k] = v
+
+        return render_template("admin_settings.html", settings=settings)
+
+    # POST (AJAX JSON)
+    data = request.get_json()
+
+    to_save = {
+        "email_per_booking": "true" if data.get("email_per_booking") else "false",
+        "attach_csv": "true" if data.get("attach_csv") else "false",
+        "daily_summary": "true" if data.get("daily_summary") else "false",
+        "weekly_summary": "true" if data.get("weekly_summary") else "false",
+        "teams_enabled": "true" if data.get("teams_enabled") else "false",
+        "teams_webhook": data.get("teams_webhook", ""),
+    }
+
+    conn = sqlite3.connect(DB)
+    cur = conn.cursor()
+
+    for key, value in to_save.items():
+        cur.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
         )
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({"success": True})
+
         flash("Settings saved"); return redirect(url_for("admin_settings"))
     settings = get_settings(); return render_template("admin_settings.html", settings=settings)
 
