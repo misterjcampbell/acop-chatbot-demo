@@ -61,15 +61,15 @@
 let currentMonth = current.getMonth(); // 0–11
 let currentYear = current.getFullYear();
 function updateMonthLabel() {
-  const monthNames = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
-  ];
+const monthLabel = `${monthNames[currentMonth]} ${currentYear}`;
+document.getElementById("calendar-month").innerText = monthLabel;
   document.getElementById("calendar-month").innerText =
     monthNames[currentMonth] + " " + currentYear;
 }
 
   function initCalendar() {
+    const monthName = start.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+    calendarTitle.textContent = monthName;
     const calendarEl = document.getElementById('calendar');
     calendar = new FullCalendar.Calendar(calendarEl, {
       initialView: 'dayGridMonth',
