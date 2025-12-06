@@ -12,4 +12,4 @@ body{font-family:Segoe UI,Arial,sans-serif;background:var(--acop-light);margin:0
 #chat-input{display:flex;border-top:1px solid #e6edf5;background:#fff;padding:8px}
 #txt{flex:1;padding:10px;border:none;font-size:14px;outline:none}
 #send{padding:0 18px;background:var(--acop-blue);color:white;border:none;border-radius:6px;cursor:pointer}
-@media (max-width:480px){#chat-popup{width:92vw;height:70vh;left:4vw;right:4vw}}
+@media (max-width:480px){#chat-popup{width:92vw;height:70vh;left:4vw;right:4vw;}}
