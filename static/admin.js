@@ -91,8 +91,8 @@
       datesSet: function(dateInfo) {
         // update calendar title in top area
         const { start } = dateInfo;
-        const monthName = start.toLocaleString(undefined, { month: 'long', year: 'numeric' });
-        calendarTitle.textContent = monthName;
+const monthLabel = `${monthNames[currentMonth]} ${currentYear}`;
+document.getElementById("calendar-month").innerText = monthLabel;
       },
     });
 
