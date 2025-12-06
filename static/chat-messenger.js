@@ -1,101 +1,110 @@
-document.addEventListener('DOMContentLoaded', () => {
-  const toggle = document.getElementById('chat-toggle');
-  const popup = document.getElementById('chat-popup');
-  const closeBtn = document.getElementById('close-chat');
-  const box = document.getElementById('chat-box');
-  const input = document.getElementById('txt');
-  const sendBtn = document.getElementById('send');
+document.addEventListener("DOMContentLoaded", () => {
+  const toggle = document.getElementById("chat-toggle");
+  const popup = document.getElementById("chat-popup");
+  const closeBtn = document.getElementById("close-chat");
+  const box = document.getElementById("chat-box");
+  const input = document.getElementById("txt");
+  const sendBtn = document.getElementById("send");
 
-  // session id persisted
-  let sid = localStorage.getItem('acop_sid');
+  // --- SESSION ID ---
+  let sid = localStorage.getItem("acop_sid");
   if (!sid) {
-    sid = (crypto && crypto.randomUUID) ? crypto.randomUUID() : 's_' + Date.now().toString(36);
-    localStorage.setItem('acop_sid', sid);
+    sid = crypto?.randomUUID
+      ? crypto.randomUUID()
+      : "s_" + Date.now().toString(36);
+    localStorage.setItem("acop_sid", sid);
   }
-function scrollChat() {
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      scrollChat();
-    });
-  });
-}
+
+  // --- OPEN & CLOSE ---
   function openChat() {
-    popup.style.display = 'block';
-    popup.setAttribute('aria-hidden', 'false');
-    input.focus();
-    // ensure last message visible
-    scrollChat();
+    popup.style.display = "block";
+    popup.setAttribute("aria-hidden", "false");
+    setTimeout(() => input.focus(), 150);
   }
   function closeChat() {
-    popup.style.display = 'none';
-    popup.setAttribute('aria-hidden', 'true');
-    toggle.focus();
+    popup.style.display = "none";
+    popup.setAttribute("aria-hidden", "true");
   }
 
-  toggle.addEventListener('click', openChat);
-  closeBtn.addEventListener('click', closeChat);
+  toggle.addEventListener("click", openChat);
+  closeBtn.addEventListener("click", closeChat);
 
-  function addMessage(text, who='bot') {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'msg ' + (who === 'user' ? 'user' : 'bot');
+  // --- SCROLL FIX ---
+  function scrollToBottom() {
+    box.scrollTop = box.scrollHeight;
+  }
 
-    const bubble = document.createElement('div');
-    bubble.className = 'bubble';
-    bubble.innerHTML = text.replace(/\n/g,'<br>');
+  // --- MESSAGE RENDERING ---
+  function addMsg(text, who = "bot") {
+    const wrapper = document.createElement("div");
+    wrapper.className = "msg " + (who === "user" ? "user" : "bot");
+
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.innerHTML = text.replace(/\n/g, "<br>");
+
     wrapper.appendChild(bubble);
-
     box.appendChild(wrapper);
-    // scroll to bottom with small delay for layout
-    setTimeout(()=> { scrollChat(); }, 50);
+    scrollToBottom();
   }
 
   function showTyping() {
-    const t = document.createElement('div');
-    t.className = 'msg bot typing';
-    t.id = 'typing-ind';
-    t.innerHTML = '<div class="bubble">Typing…</div>';
+    const t = document.createElement("div");
+    t.className = "msg bot typing";
+    t.id = "typing";
+    t.innerHTML = `<div class="bubble">Typing…</div>`;
     box.appendChild(t);
-    scrollChat();
+    scrollToBottom();
   }
+
   function hideTyping() {
-    const t = document.getElementById('typing-ind');
+    const t = document.getElementById("typing");
     if (t) t.remove();
   }
 
+  // --- SEND MESSAGE ---
   async function sendMessage() {
     const text = input.value.trim();
     if (!text) return;
-    addMessage(text, 'user');
-    input.value = '';
+
+    addMsg(text, "user");
+    input.value = "";
+
     showTyping();
 
     try {
-      const res = await fetch('/api/message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, session_id: sid })
+      const res = await fetch("/api/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, session_id: sid }),
       });
-      const data = await res.json();
+
+      const data = await res.json().catch(() => null);
       hideTyping();
-      if (data && data.reply) {
-        addMessage(data.reply, 'bot');
-      } else {
-        addMessage('Server error. Please try again.', 'bot');
+
+      if (!data || !data.reply) {
+        addMsg("Server error. Please try again.", "bot");
+        return;
       }
-      if (data && data.session_id) {
+
+      if (data.session_id) {
         sid = data.session_id;
-        localStorage.setItem('acop_sid', sid);
+        localStorage.setItem("acop_sid", sid);
       }
+
+      addMsg(data.reply, "bot");
     } catch (err) {
       hideTyping();
-      addMessage('Network error — please try again.', 'bot');
-      console.error('Chat send error', err);
+      addMsg("Network error — please try again.", "bot");
     }
   }
 
-  sendBtn.addEventListener('click', (e) => { e.preventDefault(); sendMessage(); });
-  input.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+  sendBtn.addEventListener("click", sendMessage);
+  input.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") sendMessage();
+  });
 
-  // Accessibility: ESC closes
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeChat(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeChat();
+  });
 });
