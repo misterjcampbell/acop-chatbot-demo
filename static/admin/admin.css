@@ -1,7 +1,5 @@
-body { background: #f4f7fb; }
-.brand-logo { height: 28px; }
-.card { border-radius: 10px; }
-#calendar { background: #fff; border-radius: 8px; padding: 8px; box-shadow: 0 6px 18px rgba(3,12,34,0.04); }
+body { background: #f4f7fb; font-family: "Segoe UI", Arial, sans-serif; }
+#calendar { background: #fff; padding: 8px; border-radius: 8px; box-shadow: 0 6px 18px rgba(3,12,34,0.04); }
 .fc .fc-daygrid-day.fc-day-blocked { background: #ffecec !important; }
 .fc .fc-daygrid-day.fc-day-has-booking { background: #dff3ff !important; }
-.btn-outline-primary.active, .btn-primary { background: #004cbf; color: #fff; border-color: #004cbf; }
+.btn-primary:active, .btn-primary.active { transform: none; } /* avoid confusing active stuck states */
