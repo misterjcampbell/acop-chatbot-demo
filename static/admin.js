@@ -74,50 +74,63 @@
 
   // Initialize FullCalendar
   function initCalendar() {
-    const calendarEl = document.getElementById('calendar');
-    if (!calendarEl) return;
+   const calendar = new FullCalendar.Calendar(calendarEl, {
+  initialView: 'dayGridMonth',
+  selectable: true,
+  selectMirror: true,
+  height: 'auto',
 
-    calendar = new FullCalendar.Calendar(calendarEl, {
-      initialView: 'dayGridMonth',
-      height: 'auto',
-      headerToolbar: false,
-      selectable: true,
-      selectMirror: true,
-      dayMaxEvents: 4,
+  headerToolbar: {
+    left: 'prev,next today',
+    center: 'title',
+    right: ''
+  },
 
-      // Single date click
-      dateClick: function (info) {
-        selectedDate = info.dateStr;
-        selectedRange = null;
-        highlightSelection(selectedDate);
-        toast(`Selected: ${selectedDate}`);
-      },
+  dateClick(info) {
+    selectedDate = info.dateStr;
+    selectedRange = null;
 
-      // Drag range selection
-      select: function (info) {
-        selectedDate = null;
-        selectedRange = {
-          start: info.startStr.split('T')[0],
-          end: info.endStr ? info.endStr.split('T')[0] : info.startStr.split('T')[0]
-        };
-        toast(`Range: ${selectedRange.start} → ${selectedRange.end}`);
-      },
+    calendar.removeAllEvents();
+    calendar.addEvent({
+      id: 'selected',
+      start: selectedDate,
+      allDay: true,
+      display: 'background',
+      backgroundColor: 'rgba(0,123,255,0.2)'
+    });
 
-      // Clear selection when clicking outside
-      unselect: function () {
-        selectedDate = null;
-        selectedRange = null;
-        calendar.getEvents()
-          .filter(e => e.id?.startsWith('sel-'))
-          .forEach(e => e.remove());
-      },
+    console.log("Selected single date:", selectedDate);
+  },
 
-      events: API_EVENTS,
+  select(info) {
+    const start = info.startStr.split("T")[0];
 
-      eventDidMount: function (arg) {
-        arg.el.setAttribute('title', arg.event.title || 'Blocked');
-      },
+    const endObj = new Date(info.end);
+    endObj.setDate(endObj.getDate() - 1);
+    const end = endObj.toISOString().split("T")[0];
 
+    selectedRange = { start, end };
+    selectedDate = null;
+
+    calendar.removeAllEvents();
+    calendar.addEvent({
+      id: 'selected-range',
+      start,
+      end: info.endStr,
+      display: 'background',
+      backgroundColor: 'rgba(0,123,255,0.25)'
+    });
+
+    console.log("Selected range:", selectedRange);
+  },
+
+  unselect() {
+    // LESS AGGRESSIVE – DO NOT REMOVE SELECTION
+    console.log("Unselect ignored to prevent clearing selection.");
+  },
+
+  events: '/admin/events'
+});
       // Update month title
       datesSet: function () {
         const view = calendar.view;
@@ -135,38 +148,63 @@
 
   // Button Actions
   function setupButtons() {
-    blockBtn.addEventListener('click', async () => {
-      if (!selectedDate) return toast('Click a date first');
-      await postJSON(API_BLOCK_SELECTED, { date: selectedDate });
-      toast(`Blocked ${selectedDate}`);
-      selectedDate = null;
-      calendar.refetchEvents();
-      highlightSelection.clear?.();
-    });
+blockBtn.onclick = async () => {
+  if (!selectedDate) return alert("Select a day first.");
 
-    unblockBtn.addEventListener('click', async () => {
-      if (!selectedDate) return toast('Click a date first');
-      await postJSON(API_UNBLOCK_SELECTED, { date: selectedDate });
-      toast(`Unblocked ${selectedDate}`);
-      selectedDate = null;
-      calendar.refetchEvents();
-    });
+  const res = await fetch("/admin/toggle-date", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ date: selectedDate, action: "block" })
+  });
 
-    blockRangeBtn.addEventListener('click', async () => {
-      if (!selectedRange) return toast('Drag-select a range first');
-      await postJSON(API_TOGGLE_RANGE, { ...selectedRange, action: 'block' });
-      toast(`Blocked range`);
-      selectedRange = null;
-      calendar.refetchEvents();
-    });
+  calendar.refetchEvents();
+};
 
-    unblockRangeBtn.addEventListener('click', async () => {
-      if (!selectedRange) return toast('Drag-select a range first');
-      await postJSON(API_TOGGLE_RANGE, { ...selectedRange, action: 'unblock' });
-      toast(`Unblocked range`);
-      selectedRange = null;
-      calendar.refetchEvents();
-    });
+unblockBtn.onclick = async () => {
+  if (!selectedDate) return alert("Select a day first.");
+
+  const res = await fetch("/admin/toggle-date", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ date: selectedDate, action: "unblock" })
+  });
+
+  calendar.refetchEvents();
+};
+
+
+  blockRangeBtn.onclick = async () => {
+  if (!selectedRange) return alert("Select a range first.");
+
+  await fetch("/admin/toggle-range", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ 
+      start: selectedRange.start,
+      end: selectedRange.end,
+      action: "block"
+    })
+  });
+
+  calendar.refetchEvents();
+};
+
+unblockRangeBtn.onclick = async () => {
+  if (!selectedRange) return alert("Select a range first.");
+
+  await fetch("/admin/toggle-range", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ 
+      start: selectedRange.start,
+      end: selectedRange.end,
+      action: "unblock"
+    })
+  });
+
+  calendar.refetchEvents();
+};
+
 
     // Visual toggle (optional)
     selectModeBtn.addEventListener('click', () => {
