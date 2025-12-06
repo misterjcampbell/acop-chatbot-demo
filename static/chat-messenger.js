@@ -12,7 +12,13 @@ document.addEventListener('DOMContentLoaded', () => {
     sid = (crypto && crypto.randomUUID) ? crypto.randomUUID() : 's_' + Date.now().toString(36);
     localStorage.setItem('acop_sid', sid);
   }
-
+function scrollChat() {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      box.scrollTop = box.scrollHeight;
+    });
+  });
+}
   function openChat() {
     popup.style.display = 'block';
     popup.setAttribute('aria-hidden', 'false');
