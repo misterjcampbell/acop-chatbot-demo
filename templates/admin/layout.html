@@ -1,0 +1,38 @@
+{# Base layout for admin pages #}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{% block title %}ACOP Admin{% endblock %}</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/static/admin/admin.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <nav class="navbar navbar-light bg-white shadow-sm">
+    <div class="container">
+      <a class="navbar-brand" href="/admin">
+        <img src="/static/acop-logo-small.png" alt="ACOP" class="brand-logo" style="height:30px; margin-right:8px">
+        ACOP • Admin
+      </a>
+      <div>
+        <a class="btn btn-outline-primary btn-sm" href="/admin/export">Export CSV</a>
+        <a class="btn btn-outline-secondary btn-sm" href="/admin/settings">Settings</a>
+        <a class="btn btn-danger btn-sm" href="/admin/logout">Logout</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container my-4">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="/static/admin/admin.js" defer></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

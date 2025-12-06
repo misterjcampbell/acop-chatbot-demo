@@ -1,0 +1,22 @@
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <button id="prevBtn" class="btn btn-sm btn-light">&larr;</button>
+        <span id="calendarTitle" class="fs-5 ms-2"></span>
+        <button id="nextBtn" class="btn btn-sm btn-light ms-2">&rarr;</button>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-outline-primary btn-sm" id="blockRangeBtn">Block Selected Range</button>
+        <button class="btn btn-outline-secondary btn-sm" id="unblockRangeBtn">Unblock Selected Range</button>
+        <button class="btn btn-outline-success btn-sm" id="blockBtn">Block Selected Day</button>
+        <button class="btn btn-outline-warning btn-sm" id="unblockBtn">Unblock Selected Day</button>
+        <button class="btn btn-outline-info btn-sm" id="refreshBtn">Refresh</button>
+      </div>
+    </div>
+
+    <div id="calendar" class="fc"></div>
+    <div class="mt-2 text-muted small">Tip: drag to select a range. Click single day to select it.</div>
+  </div>
+</div>
