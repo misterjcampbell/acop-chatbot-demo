@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function scrollChat() {
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      box.scrollTop = box.scrollHeight;
+      scrollChat();
     });
   });
 }
@@ -24,7 +24,7 @@ function scrollChat() {
     popup.setAttribute('aria-hidden', 'false');
     input.focus();
     // ensure last message visible
-    box.scrollTop = box.scrollHeight;
+    scrollChat();
   }
   function closeChat() {
     popup.style.display = 'none';
@@ -46,7 +46,7 @@ function scrollChat() {
 
     box.appendChild(wrapper);
     // scroll to bottom with small delay for layout
-    setTimeout(()=> { box.scrollTop = box.scrollHeight; }, 50);
+    setTimeout(()=> { scrollChat(); }, 50);
   }
 
   function showTyping() {
@@ -55,7 +55,7 @@ function scrollChat() {
     t.id = 'typing-ind';
     t.innerHTML = '<div class="bubble">Typing…</div>';
     box.appendChild(t);
-    box.scrollTop = box.scrollHeight;
+    scrollChat();
   }
   function hideTyping() {
     const t = document.getElementById('typing-ind');
