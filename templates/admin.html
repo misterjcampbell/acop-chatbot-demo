@@ -24,7 +24,31 @@
     <div id="calendarTitle">Loading…</div>
     <button id="nextBtn" class="cal-nav">›</button>
   </div>
-
+   <h4 class="mt-4">Bookings</h4>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead class="table-light"><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Date</th><th>Time</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for b in bookings %}
+          <tr>
+            <td>{{ b[0] }}</td>
+            <td>{{ b[1] }}</td>
+            <td>{{ b[2] }}</td>
+            <td>{{ b[3] }}</td>
+            <td>{{ b[4] }}</td>
+            <td>{{ b[5] }}</td>
+            <td>
+              <form method="POST" action="/admin/delete-booking/{{ b[0] }}" onsubmit="return confirm('Delete booking?')">
+                <button class="btn btn-sm btn-danger">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="text-center text-muted">No bookings yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   <div class="control-row">
     <button id="blockBtn" class="btn btn-danger">Block Date</button>
     <button id="unblockBtn" class="btn btn-success">Unblock Date</button>
