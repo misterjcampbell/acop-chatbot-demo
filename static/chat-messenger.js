@@ -1,5 +1,12 @@
 let sessionId = null;
+const launcher = document.getElementById("chat-launcher");
+const wrapper = document.getElementById("chat-wrapper");
 
+launcher.onclick = () => {
+    wrapper.classList.remove("hidden");
+    launcher.style.display = "none";
+    startChat();
+};
 // DOM elements
 const chatBox = document.getElementById("chat-messages");
 const input = document.getElementById("chat-input");
