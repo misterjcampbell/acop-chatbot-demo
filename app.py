@@ -1,4 +1,4 @@
-# app.py — ACOP Booking Chatbot (Patched, Full - Option B)
+# app.py — ACOP Booking Chatbot (Patched & Fixed)
 import os
 import re
 import io
@@ -10,6 +10,7 @@ import smtplib
 from email.message import EmailMessage
 from datetime import datetime, timedelta
 from functools import wraps
+
 import pytz
 import requests
 from icalendar import Calendar, Event
@@ -48,6 +49,7 @@ ADMIN_PASS = os.getenv("ADMIN_PASS", "Acop2025!")
 
 # ---------------- DB helpers & init ----------------
 def get_conn():
+    # Use check_same_thread=False for potential multi-threaded WSGI, but keep default for simplicity
     return sqlite3.connect(DB_FILE)
 
 def init_db():
@@ -121,7 +123,8 @@ def update_settings(**kwargs):
         if k in kwargs:
             sets.append(f"{k}=?")
             v = kwargs[k]
-            if isinstance(v, bool):
+            # teams_webhook is string
+            if isinstance(v, bool) and k != "teams_webhook":
                 params.append(1 if v else 0)
             else:
                 params.append(v)
@@ -242,8 +245,6 @@ def next_available_dates(start_date_iso, count=3):
         d = datetime.strptime(start_date_iso, "%Y-%m-%d").date()
     except:
         d = datetime.now(LOCAL_TZ).date()
-    # if start_date is today or future, begin search the next day if start is blocked/invalid
-    # We'll iterate up to 1 year to be safe
     for _ in range(365):
         d_str = d.isoformat()
         if (not is_weekend(d_str)
@@ -259,6 +260,10 @@ def next_available_dates(start_date_iso, count=3):
 
 # ---------------- Email & Teams ----------------
 def send_email_with_attachments(to_email, subject, plain_text, html=None, attachments=None):
+    """
+    Uses STARTTLS prior to login to be compatible with Mailtrap and TLS servers.
+    attachments: list of (filename, bytes, subtype)
+    """
     try:
         msg = EmailMessage()
         msg["From"] = FROM_EMAIL; msg["To"] = to_email; msg["Subject"] = subject
@@ -268,8 +273,16 @@ def send_email_with_attachments(to_email, subject, plain_text, html=None, attach
             for fname, data_bytes, subtype in attachments:
                 maintype = "text" if subtype == "csv" else "application"
                 msg.add_attachment(data_bytes, maintype=maintype, subtype=subtype, filename=fname)
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-            s.login(SMTP_USER, SMTP_PASS)
+
+        # Use STARTTLS for compatibility
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as s:
+            try:
+                s.starttls()
+            except Exception:
+                # Some test servers accept non-TLS on 2525 — ignore starttls errors but log
+                app.logger.debug("starttls failed or not supported, continuing without TLS")
+            if SMTP_USER and SMTP_PASS:
+                s.login(SMTP_USER, SMTP_PASS)
             s.send_message(msg)
         return True
     except Exception as e:
@@ -292,18 +305,28 @@ def send_confirmation_email(name, email, phone, date_iso, time_str):
     return send_email_with_attachments(email, subj, text, html=html, attachments=attachments)
 
 def notify_on_booking(booking_row):
+    """
+    booking_row: (id, name, email, phone, date, time, created_at)
+    """
     settings = get_settings()
     pretty = datetime.strptime(booking_row[4], "%Y-%m-%d").strftime("%d %B %Y")
     text = f"New booking: {booking_row[1]} — {pretty} {booking_row[5]}\nEmail: {booking_row[2]}\nPhone: {booking_row[3]}"
+    # send admin email
     if settings.get("email_per_booking"):
         attachments = []
         if settings.get("attach_csv"):
             buf = io.StringIO(); w = csv.writer(buf); w.writerow(["ID","Name","Email","Phone","Date","Time","Created"]); w.writerow(booking_row); attachments.append(("booking.csv", buf.getvalue().encode('utf-8'), "csv"))
-        send_email_with_attachments(ADMIN_EMAIL, f"New Booking: {booking_row[1]}", text, html=None, attachments=attachments if attachments else None)
+        try:
+            send_email_with_attachments(ADMIN_EMAIL, f"New Booking: {booking_row[1]}", text, html=None, attachments=attachments if attachments else None)
+        except Exception:
+            app.logger.exception("admin email failed")
+    # teams
     webhook = settings.get("teams_webhook") or TEAMS_WEBHOOK_ENV
     if settings.get("teams_enabled") and webhook:
-        try: requests.post(webhook, json={"text": text}, timeout=6)
-        except Exception: app.logger.exception("teams failed")
+        try:
+            requests.post(webhook, json={"text": text}, timeout=8)
+        except Exception:
+            app.logger.exception("teams failed")
 
 # ---------------- Admin auth ----------------
 def require_admin(fn):
@@ -370,7 +393,6 @@ def admin_toggle_range():
         unblock_range(start, end)
     return jsonify({"ok": True})
 
-# Mode B endpoints: admin selects a date in the calendar UI and then presses a button to block/unblock
 @app.route("/admin/block-selected", methods=["POST"])
 @require_admin
 def admin_block_selected():
@@ -428,10 +450,13 @@ def admin_test_teams():
     settings = get_settings(); webhook = settings.get("teams_webhook") or TEAMS_WEBHOOK_ENV
     if not webhook: return "No webhook"
     try: requests.post(webhook, json={"text":"ACOP test message"}, timeout=6); return "OK"
-    except: return "FAIL"
+    except Exception:
+        return "FAIL"
 
-# ---------------- Chat session persistence ----------------
+# ---------------- Chat session persistence (DB-backed) ----------------
 def load_session(sid):
+    if not sid:
+        return {"stage":"name"}
     conn = get_conn(); cur = conn.cursor()
     cur.execute("SELECT state FROM chat_sessions WHERE sid=?", (sid,))
     row = cur.fetchone(); conn.close()
@@ -439,7 +464,7 @@ def load_session(sid):
         return {"stage":"name"}
     try:
         return json.loads(row[0])
-    except:
+    except Exception:
         return {"stage":"name"}
 
 def save_session(sid, state):
@@ -461,20 +486,19 @@ def api_message():
     try:
         data = request.get_json(silent=True) or {}
         raw = data.get("message","") or ""
+        # `from_button` may be provided by the front-end when a button is clicked
+        from_button = bool(data.get("from_button", False))
         msg = raw.strip()
-        sid = data.get("session_id") or request.cookies.get("sid") or str(uuid.uuid4())
+        session_id = data.get("session_id") or request.cookies.get("sid") or str(uuid.uuid4())
 
-        # For this example we store simple session in memory; you can adapt to DB-based
-        # We'll keep a very small in-memory session here for demo only
-        if not hasattr(app, 'chat_sessions'):
-            app.chat_sessions = {}
-        state = app.chat_sessions.get(sid, {"stage":"name"})
+        # load persistent DB-backed session
+        state = load_session(session_id)
+        if "stage" not in state:
+            state["stage"] = "name"
 
-        reply = ""
-
-        # Temporary test command for UI test
+        # Quick test button flow
         if msg.lower() == "test buttons":
-            reply = {
+            reply_payload = {
                 "text": "Pick an option:",
                 "buttons": [
                     {"label":"Tomorrow", "value":"tomorrow"},
@@ -482,28 +506,38 @@ def api_message():
                     {"label":"Pick a date", "value":"pick date"}
                 ]
             }
-            resp = make_response(jsonify({"reply": reply["text"], "buttons": reply["buttons"], "session_id": sid}))
-            resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
+            resp = make_response(jsonify({"reply": reply_payload["text"], "buttons": reply_payload["buttons"], "session_id": session_id}))
+            resp.set_cookie("sid", session_id, httponly=True, samesite="Lax")
             return resp
 
-        # Chat state machine (simplified, safe)
+        reply = ""
+
+        # STATE MACHINE
         if state["stage"] == "name":
             if len(msg) < 2 or any(c.isdigit() for c in msg):
                 reply = "Please enter a valid name."
             else:
-                state["name"] = msg.title(); state["stage"] = "email"
+                state["name"] = msg.title()
+                state["stage"] = "email"
                 reply = f"Thanks {state['name']}! What's your email?"
+
         elif state["stage"] == "email":
             if "@" not in msg or "." not in msg:
                 reply = "Please enter a valid email."
             else:
-                state["email"] = msg.lower(); state["stage"] = "phone"; reply = "Your phone number?"
+                state["email"] = msg.lower()
+                state["stage"] = "phone"
+                reply = "Your phone number?"
+
         elif state["stage"] == "phone":
             cleaned = "".join(c for c in msg if c.isdigit() or c in "+ -")
             if len(cleaned.replace(" ", "").replace("-", "")) < 8:
                 reply = "Please enter a valid phone number."
             else:
-                state["phone"] = msg; state["stage"] = "date"; reply = "Which date? (e.g. 27/11/2025)"
+                state["phone"] = msg
+                state["stage"] = "date"
+                reply = "Which date? (e.g. 27/11/2025)"
+
         elif state["stage"] == "date":
             parsed = parse_date(msg)
             if not parsed:
@@ -539,13 +573,14 @@ def api_message():
                     else:
                         state["date"] = parsed; state["stage"] = "time"; state["available"] = free
                         human = datetime.strptime(parsed, "%Y-%m-%d").strftime("%d %B %Y")
-                        # provide buttons for time slots
                         buttons = [{"label": t, "value": t} for t in free]
-                        app.chat_sessions[sid] = state
-                        resp = make_response(jsonify({"reply": f"Available on {human}: {', '.join(free)}", "buttons": buttons, "session_id": sid}))
-                        resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
+                        save_session(session_id, state)
+                        resp = make_response(jsonify({"reply": f"Available on {human}: {', '.join(free)}", "buttons": buttons, "session_id": session_id}))
+                        resp.set_cookie("sid", session_id, httponly=True, samesite="Lax")
                         return resp
+
         elif state["stage"] == "time":
+            # If front-end sent from_button true and the message is the value, accept it normally.
             tnorm = normalize_time(msg) or msg.replace(".", ":")
             if tnorm not in TIME_SLOTS:
                 reply = f"Please choose from: {', '.join(TIME_SLOTS)}"
@@ -565,30 +600,54 @@ def api_message():
                 else:
                     reply = f"Too late to book that time — you need at least {LEAD_TIME_MINUTES} minutes notice."
             else:
+                # All good — create booking
                 bid = save_booking(state.get("name"), state.get("email"), state.get("phone"), state.get("date"), tnorm)
-                reply = f"Confirmed! Your call is on {datetime.strptime(state.get('date'), '%Y-%m-%d').strftime('%d %B %Y')} at {tnorm}\n\nType 'cancel' to change."
-                # clear session
-                if sid in app.chat_sessions: del app.chat_sessions[sid]
+                booking_row = get_booking(bid)
+                # send confirmation email (non-fatal)
+                try:
+                    send_confirmation_email(state.get("name"), state.get("email"), state.get("phone"), state.get("date"), tnorm)
+                except Exception:
+                    app.logger.exception("confirmation email failed")
+                # notify admin
+                try:
+                    notify_on_booking(booking_row)
+                except Exception:
+                    app.logger.exception("admin notify failed")
+                human = datetime.strptime(state.get("date"), "%Y-%m-%d").strftime("%d %B %Y")
+                reply = f"Confirmed! Your call is on {human} at {tnorm}\n\nType 'cancel' to change."
+                # clear session from DB
+                delete_session(session_id)
+                # return response
+                resp = make_response(jsonify({"reply": reply, "session_id": session_id}))
+                resp.set_cookie("sid", session_id, httponly=True, samesite="Lax")
+                return resp
+
         else:
             reply = "Sorry — something went wrong. Please try again."
 
         # persist state
-        app.chat_sessions[sid] = state
+        save_session(session_id, state)
 
-        # Build response (support dict or string)
+        # Build response (support dict reply)
         if isinstance(reply, dict):
-            resp_body = {"reply": reply.get("text",""), "buttons": reply.get("buttons", []), "session_id": sid}
+            # convert structured reply to response
+            response = {
+                "reply": reply.get("text", ""),
+                "buttons": reply.get("buttons", []),
+                "session_id": session_id
+            }
         else:
-            resp_body = {"reply": reply, "session_id": sid}
+            response = {"reply": reply, "session_id": session_id}
 
-        resp = make_response(jsonify(resp_body))
-        resp.set_cookie("sid", sid, httponly=True, samesite="Lax")
+        resp = make_response(jsonify(response))
+        resp.set_cookie("sid", session_id, httponly=True, samesite="Lax")
         return resp
 
     except Exception as e:
         app.logger.exception("chat error: %s", e)
         return jsonify({"reply": "Server error. Please try again."}), 500
 
+# ---------------- Run ----------------
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=False)
