@@ -77,11 +77,9 @@ input.onkeydown = e => { if (e.key === "Enter") sendMessage(); };
 
 // Auto-scroll fix on load
 async function startChat() {
-  const res = await fetch("/api/message", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: "start" })
-  });
+  // Show welcome message without hitting backend
+  addMessage("Hi there! I can help you book your assessment call.\n\nWhat's your name?", "bot");
+}
 
   const data = await res.json();
 
