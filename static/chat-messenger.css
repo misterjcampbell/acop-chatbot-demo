@@ -1,25 +1,52 @@
 /* Messenger Wrapper */
-#chat-wrapper {
+##chat-launcher {
   position: fixed;
   bottom: 20px;
   right: 20px;
+  background: #004cbf;
+  color: white;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+  z-index: 99999;
+}
+
+#chat-wrapper.hidden {
+  display: none;
+}
+
+#chat-wrapper {
+  position: fixed;
+  bottom: 90px;
+  right: 20px;
   width: 360px;
-  height: 520px;           /* NEW — stable initial height */
-  max-height: 85vh;        /* For small screens */
-  background: #ffffff;
+  height: 520px;
+  max-height: 80vh;
+  background: #fff;
   border-radius: 20px;
-  overflow: hidden;
-  box-shadow: 0px 4px 25px rgba(0,0,0,0.15);
+  box-shadow: 0 4px 25px rgba(0,0,0,0.25);
   display: flex;
   flex-direction: column;
-  z-index: 999999;
+  overflow: hidden;
+  z-index: 99998;
 }
+
 @media (max-width: 600px) {
   #chat-wrapper {
     width: 95vw;
     height: 70vh;
-    bottom: 10px;
-    right: 10px;
+    bottom: 80px;
+    right: 2.5vw;
+  }
+  #chat-launcher {
+    bottom: 15px;
+    right: 15px;
   }
 }
 /* Header */
