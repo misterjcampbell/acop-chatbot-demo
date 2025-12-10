@@ -14,7 +14,14 @@
   flex-direction: column;
   z-index: 999999;
 }
-
+@media (max-width: 600px) {
+  #chat-wrapper {
+    width: 95vw;
+    height: 70vh;
+    bottom: 10px;
+    right: 10px;
+  }
+}
 /* Header */
 #chat-header {
   background: #1E56C7;
