@@ -69,3 +69,24 @@ document.addEventListener("DOMContentLoaded", () => {
     post("/admin/toggle-range", { ...selectedRange, action: "unblock" });
   };
 });
+document.getElementById("testEmailBtn")?.addEventListener("click", async () => {
+    const resultEl = document.getElementById("testEmailResult");
+    resultEl.textContent = "Sending...";
+    resultEl.style.color = "#555";
+
+    try {
+        const r = await fetch("/admin/test-email");
+        const t = await r.text();
+
+        if (t.trim() === "OK") {
+            resultEl.textContent = "Email sent successfully!";
+            resultEl.style.color = "green";
+        } else {
+            resultEl.textContent = "Email FAILED: " + t;
+            resultEl.style.color = "red";
+        }
+    } catch (e) {
+        resultEl.textContent = "Network error — could not send.";
+        resultEl.style.color = "red";
+    }
+});
