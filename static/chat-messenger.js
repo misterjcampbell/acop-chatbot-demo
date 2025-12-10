@@ -1,121 +1,71 @@
-// static/chat-messenger.js
-document.addEventListener('DOMContentLoaded', () => {
-  const toggle = document.getElementById('chat-toggle');
-  const popup = document.getElementById('chat-popup');
-  const closeBtn = document.getElementById('close-chat');
-  const box = document.getElementById('chat-box');
-  const inputEl = document.getElementById('txt');
-  const sendBtn = document.getElementById('send');
+let sessionId = null;
 
-  // Pick or generate session id
-  let session_id = localStorage.getItem('acop_sid');
-  if (!session_id) {
-    session_id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : ('s_' + Date.now().toString(36) + Math.random().toString(36).slice(2));
-    localStorage.setItem('acop_sid', session_id);
-  }
+// DOM elements
+const chatBox = document.getElementById("chat-messages");
+const input = document.getElementById("chat-input");
+const sendBtn = document.getElementById("chat-send");
 
-  function open() { popup.style.display = 'block'; inputEl.focus(); popup.setAttribute('aria-hidden','false'); }
-  function close() { popup.style.display = 'none'; popup.setAttribute('aria-hidden','true'); toggle.focus(); }
+function scrollChat() {
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
 
-  toggle.addEventListener('click', open);
-  closeBtn.addEventListener('click', close);
+// Add message to chat UI
+function addMessage(text, type = "bot") {
+  const bubble = document.createElement("div");
+  bubble.className = type === "user" ? "msg-user" : "msg-bot";
+  bubble.innerText = text;
+  chatBox.appendChild(bubble);
+  scrollChat();
+}
 
-  function createMsgElement(text, who='bot') {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'msg ' + (who === 'user' ? 'user' : 'bot');
+// Render buttons sent by bot
+function addButtons(buttonArray) {
+  const container = document.createElement("div");
+  container.className = "msg-bot";
 
-    const bubble = document.createElement('div');
-    bubble.className = 'bubble';
-    bubble.innerHTML = String(text).replace(/\n/g, '<br>');
-    wrapper.appendChild(bubble);
+  buttonArray.forEach(btn => {
+    const button = document.createElement("button");
+    button.className = "bot-button";
+    button.innerText = btn.label;
+    button.onclick = () => sendMessage(btn.value, true);
+    container.appendChild(button);
+  });
 
-    return { wrapper, bubble };
-  }
+  chatBox.appendChild(container);
+  scrollChat();
+}
 
-  function addMessage(text, who='bot', buttons=null) {
-    const { wrapper } = createMsgElement(text, who);
-    box.appendChild(wrapper);
+// Main message sender
+async function sendMessage(override = null, fromButton = false) {
+  const text = override || input.value.trim();
+  if (!text) return;
 
-    if (buttons && Array.isArray(buttons) && buttons.length) {
-      const row = document.createElement('div');
-      row.className = 'quick-buttons';
-      buttons.forEach(btn => {
-        const b = document.createElement('button');
-        b.className = 'quick-button';
-        b.type = 'button';
-        b.textContent = btn.label || btn;
-        b.onclick = () => {
-          addMessage(btn.label || btn, 'user');
-          // send the button's value to the backend
-          sendMessage(btn.value || btn, true);
-          // remove quick buttons after click
-          row.remove();
-        };
-        row.appendChild(b);
-      });
-      box.appendChild(row);
-    }
+  if (!fromButton) addMessage(text, "user");
+  input.value = "";
 
-    box.scrollTop = box.scrollHeight;
-  }
+  const payload = { message: text };
+  if (sessionId) payload.session_id = sessionId;
 
-  function showTyping() {
-    const { wrapper } = createMsgElement('Typing...', 'bot');
-    wrapper.id = 'typing-ind';
-    box.appendChild(wrapper);
-    box.scrollTop = box.scrollHeight;
-  }
-  function hideTyping() {
-    const el = document.getElementById('typing-ind');
-    if (el) el.remove();
-  }
+  const res = await fetch("/api/message", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
 
-  async function sendMessage(override=null, fromButton=false) {
-    const text = (override !== null && override !== undefined) ? String(override).trim() : inputEl.value.trim();
-    if (!text) return;
+  const data = await res.json();
 
-    if (!fromButton) {
-      addMessage(text, 'user');
-      inputEl.value = '';
-    }
+  // Save session
+  if (data.session_id) sessionId = data.session_id;
 
-    showTyping();
+  // Always display reply
+  if (data.reply) addMessage(data.reply, "bot");
 
-    try {
-      const res = await fetch('/api/message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, session_id: session_id })
-      });
+  // Render rich buttons
+  if (data.buttons) addButtons(data.buttons);
+}
 
-      const data = await res.json().catch(()=>null);
-      hideTyping();
+sendBtn.onclick = () => sendMessage();
+input.onkeydown = e => { if (e.key === "Enter") sendMessage(); };
 
-      if (!data || typeof data.reply === 'undefined') {
-        addMessage('Server error. Please try again.', 'bot');
-        return;
-      }
-
-      if (data.session_id) {
-        session_id = data.session_id;
-        localStorage.setItem('acop_sid', session_id);
-      }
-
-      addMessage(String(data.reply || ''), 'bot', data.buttons || null);
-    } catch (err) {
-      hideTyping();
-      addMessage('Network error — please try again.', 'bot');
-      console.error('Chat error', err);
-    }
-  }
-
-  sendBtn.addEventListener('click', (e) => { e.preventDefault(); sendMessage(); });
-  inputEl.addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendMessage(); } });
-
-  // ensure chat auto-scrolls when user manually scrolls after messages
-  box.addEventListener('scroll', () => { /* placeholder if you want to implement "user scrolled" behaviour */ });
-
-  // open chat if user arrives from a query param ?openchat=1
-  if (new URLSearchParams(window.location.search).get('openchat') === '1') open();
-});
-
+// Auto-scroll fix on load
+window.onload = scrollChat;
