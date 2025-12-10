@@ -81,4 +81,9 @@ async function startChat() {
   if (data.reply) addMessage(data.reply, "bot");
   if (data.buttons) addButtons(data.buttons);
 }
-window.onload = scrollChat;
+window.onload = () => {
+  sessionId = null;     // Force fresh session
+  chatBox.innerHTML = ""; 
+  startChat();
+  scrollChat();
+};
