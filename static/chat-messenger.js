@@ -16,6 +16,7 @@ function addMessage(text, type = "bot") {
   bubble.innerText = text;
   chatBox.appendChild(bubble);
   scrollChat();
+setTimeout(scrollChat, 80);
 }
 
 // Render buttons sent by bot
