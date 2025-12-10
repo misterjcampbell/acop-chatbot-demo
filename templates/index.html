@@ -1,46 +1,27 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="utf-8" />
-  <title>ACOP Booking Assistant — Messenger</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="/static/chat-messenger.css">
+    <title>ACOP Booking Assistant</title>
+    <link rel="stylesheet" href="/static/chat-messenger.css">
 </head>
+
 <body>
 
-<button id="chat-toggle" aria-label="Open chat" title="Open chat">Chat</button>
-
-<div id="chat-popup" aria-hidden="true" role="dialog" aria-label="ACOP chat">
-  <div id="chat-window">
-    <div id="chat-top">
-      <div class="brand">
-        <img src="/static/acop-logo-small.png" alt="ACOP" class="brand-logo" />
-        <div class="brand-text">
-          <div class="brand-title">ACOP Booking Assistant</div>
-          <div class="brand-sub">Usually replies in seconds</div>
-        </div>
-      </div>
-      <button id="close-chat" aria-label="Close chat">✕</button>
+<div id="chat-wrapper">
+    <div id="chat-header">
+        ACOP Booking Assistant
+        <span style="cursor:pointer;" onclick="location.reload()">✕</span>
     </div>
 
-    <div id="chat-box" aria-live="polite" role="log">
-      <!-- initial bot greeting (kept for instant UX) -->
-      <div class="msg bot">
-        <div class="bubble">
-          Hi! I'm here to help you book your assessment call.
-          <div class="small">What's your name?</div>
-        </div>
-      </div>
-    </div>
+    <div id="chat-messages"></div>
 
-    <form id="chat-input" autocomplete="off" onsubmit="return false;">
-      <input id="txt" type="text" placeholder="Type your message..." aria-label="Message input" />
-      <button id="send" aria-label="Send">Send</button>
-    </form>
-  </div>
+    <div id="chat-input-box">
+        <input id="chat-input" placeholder="Type your message...">
+        <button id="chat-send">Send</button>
+    </div>
 </div>
 
-<script src="/static/chat-messenger.js" defer></script>
+<script src="/static/chat-messenger.js"></script>
+
 </body>
 </html>
-
