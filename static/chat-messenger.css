@@ -3,8 +3,9 @@
   position: fixed;
   bottom: 20px;
   right: 20px;
-  width: 380px;
-  max-height: 80vh;
+  width: 360px;
+  height: 520px;           /* NEW — stable initial height */
+  max-height: 85vh;        /* For small screens */
   background: #ffffff;
   border-radius: 20px;
   overflow: hidden;
