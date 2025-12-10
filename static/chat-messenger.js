@@ -68,4 +68,17 @@ sendBtn.onclick = () => sendMessage();
 input.onkeydown = e => { if (e.key === "Enter") sendMessage(); };
 
 // Auto-scroll fix on load
+async function startChat() {
+  const res = await fetch("/api/message", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "start" })
+  });
+
+  const data = await res.json();
+
+  if (data.session_id) sessionId = data.session_id;
+  if (data.reply) addMessage(data.reply, "bot");
+  if (data.buttons) addButtons(data.buttons);
+}
 window.onload = scrollChat;
