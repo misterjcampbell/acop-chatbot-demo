@@ -90,8 +90,7 @@ async function startChat() {
   if (data.buttons) addButtons(data.buttons);
 }
 window.onload = () => {
-  sessionId = null;     // Force fresh session
-  chatBox.innerHTML = ""; 
-  startChat();
-  scrollChat();
+  sessionId = null;
+  chatBox.innerHTML = "";
+  // Do nothing else — wait for user to click launcher
 };
