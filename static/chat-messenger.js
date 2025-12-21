@@ -57,13 +57,26 @@ function scrollChat() {
 // Add message
 function addMessage(text, type = "bot") {
     const wrapper = document.createElement("div");
-    wrapper.className = type === "user" ? "msg-user-wrap" : "msg-bot";
+    wrapper.className = type === "user" ? "msg-row user" : "msg-row bot";
 
     const bubble = document.createElement("div");
-    bubble.className = type === "user" ? "msg-user" : "msg-bot";
+    bubble.className = "bubble";
     bubble.innerText = text;
 
     wrapper.appendChild(bubble);
+
+    // Read receipt (user only)
+    if (type === "user") {
+        const receipt = document.createElement("span");
+        receipt.className = "read-receipt";
+        receipt.innerText = "✓";
+        wrapper.appendChild(receipt);
+        wrapper.dataset.receipt = "sent";
+    }
+
+    chatBox.appendChild(wrapper);
+    scrollChat();
+}
 
     // Read receipt
     if (type === "user") {
