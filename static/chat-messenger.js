@@ -9,9 +9,29 @@ const wrapper = document.getElementById("chat-wrapper");
 // Open chat
 launcher.onclick = () => {
     wrapper.classList.remove("hidden");
+    setTimeout(() => wrapper.classList.add("open"), 10);
     launcher.style.display = "none";
     startChat();
 };
+
+// Bubble
+let typingBubble = null;
+
+function showTyping() {
+    if (typingBubble) return;
+    typingBubble = document.createElement("div");
+    typingBubble.className = "msg-bot typing";
+    typingBubble.innerText = "ACOP is typing…";
+    chatBox.appendChild(typingBubble);
+    scrollChat();
+}
+
+function hideTyping() {
+    if (typingBubble) {
+        typingBubble.remove();
+        typingBubble = null;
+    }
+}
 
 // DOM
 const chatBox = document.getElementById("chat-messages");
@@ -25,13 +45,28 @@ function scrollChat() {
 
 // Add message
 function addMessage(text, type = "bot") {
+    const wrapper = document.createElement("div");
+    wrapper.className = type === "user" ? "msg-user-wrap" : "msg-bot";
+
     const bubble = document.createElement("div");
     bubble.className = type === "user" ? "msg-user" : "msg-bot";
     bubble.innerText = text;
-    chatBox.appendChild(bubble);
+
+    wrapper.appendChild(bubble);
+
+    // Read receipt
+    if (type === "user") {
+        const receipt = document.createElement("span");
+        receipt.className = "read-receipt";
+        receipt.innerText = "✓";
+        wrapper.appendChild(receipt);
+        wrapper.dataset.receipt = "sent";
+    }
+
+    chatBox.appendChild(wrapper);
     scrollChat();
-    setTimeout(scrollChat, 60);
 }
+
 
 // Buttons (chips)
 function addButtons(buttonArray) {
@@ -72,6 +107,10 @@ async function sendMessage(override = null, fromButton = false) {
 
         if (data.session_id) sessionId = data.session_id;
         if (data.reply) addMessage(data.reply, "bot");
+        document.querySelectorAll("[data-receipt='sent']").forEach(el => {
+            el.querySelector(".read-receipt").innerText = "✓✓";
+            el.dataset.receipt = "read";
+        });
         if (data.buttons) addButtons(data.buttons);
 
     } catch (err) {
@@ -80,7 +119,7 @@ async function sendMessage(override = null, fromButton = false) {
 }
 
 // Send on click + Enter
-sendBtn.onclick = () => sendMessage();
+sendBtn.onclick = () => showTyping();sendMessage();hideTyping();hideTyping();
 input.onkeydown = e => { if (e.key === "Enter") sendMessage(); };
 
 // --------------------------------------
@@ -90,6 +129,13 @@ function startChat() {
     chatBox.innerHTML = "";
     addMessage("Hi there! I can help you book your assessment call.\n\nWhat's your name?", "bot");
 }
+document.getElementById("chat-close").onclick = () => {
+    wrapper.classList.remove("open");
+    setTimeout(() => {
+        wrapper.classList.add("hidden");
+        launcher.style.display = "block";
+    }, 300);
+};
 
 // --------------------------------------
 // RESET on page load

@@ -1,6 +1,51 @@
 /* -----------------------------------------------------
    ACOP Booking Assistant — Messenger Style Chat Widget
 ----------------------------------------------------- */
+/* read*/
+.msg-user-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.read-receipt {
+  font-size: 10px;
+  opacity: 0.6;
+  margin-top: 2px;
+}
+/*slide up*/
+#chat-wrapper {
+  transform: translateY(100%);
+  transition: transform 0.35s ease;
+}
+
+#chat-wrapper.open {
+  transform: translateY(0);
+}
+
+/*logo*/
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chat-logo {
+  height: 28px;
+}
+
+/* typing */
+.typing {
+  font-style: italic;
+  opacity: 0.7;
+  animation: blink 1.2s infinite;
+}
+
+@keyframes blink {
+  0% { opacity: .3; }
+  50% { opacity: .8; }
+  100% { opacity: .3; }
+}
 
 /* Launcher button */
 .chat-launcher {
