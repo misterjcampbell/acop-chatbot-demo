@@ -36,16 +36,33 @@
 
 /* typing */
 .typing {
-  font-style: italic;
-  opacity: 0.7;
-  animation: blink 1.2s infinite;
+  background: transparent;
+  display: flex;
+  gap: 6px;
+  padding: 10px 14px;
 }
 
-@keyframes blink {
-  0% { opacity: .3; }
-  50% { opacity: .8; }
-  100% { opacity: .3; }
+.typing span {
+  width: 6px;
+  height: 6px;
+  background: #999;
+  border-radius: 50%;
+  animation: typingDot 1.4s infinite both;
 }
+
+.typing span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.typing span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typingDot {
+  0% { opacity: 0.3; }
+  20% { opacity: 1; }
+  100% { opacity: 0.3; }
+}
+
 
 /* Launcher button */
 .chat-launcher {

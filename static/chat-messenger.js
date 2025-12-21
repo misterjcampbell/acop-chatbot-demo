@@ -5,7 +5,10 @@
 let sessionId = null;
 const launcher = document.getElementById("chat-launcher");
 const wrapper = document.getElementById("chat-wrapper");
-
+// delay
+let typingBubble = null;
+let typingStartTime = 0;
+const MIN_TYPING_TIME = 700; // ms (tweak 500–900 if you want)
 // Open chat
 launcher.onclick = () => {
     wrapper.classList.remove("hidden");
@@ -19,19 +22,27 @@ let typingBubble = null;
 
 function showTyping() {
     if (typingBubble) return;
+    typingStartTime = Date.now();
     typingBubble = document.createElement("div");
     typingBubble.className = "msg-bot typing";
-    typingBubble.innerText = "ACOP is typing…";
+    typingBubble.innerHTML = "<span></span><span></span><span></span>";
     chatBox.appendChild(typingBubble);
     scrollChat();
 }
 
-function hideTyping() {
-    if (typingBubble) {
-        typingBubble.remove();
-        typingBubble = null;
-    }
+function hideTyping(callback) {
+    const elapsed = Date.now() - typingStartTime;
+    const delay = Math.max(0, MIN_TYPING_TIME - elapsed);
+
+    setTimeout(() => {
+        if (typingBubble) {
+            typingBubble.remove();
+            typingBubble = null;
+        }
+        if (callback) callback();
+    }, delay);
 }
+
 
 // DOM
 const chatBox = document.getElementById("chat-messages");
@@ -121,6 +132,11 @@ async function sendMessage(override = null, fromButton = false) {
 // Send on click + Enter
 sendBtn.onclick = () => showTyping();sendMessage();hideTyping();hideTyping();
 input.onkeydown = e => { if (e.key === "Enter") sendMessage(); };
+hideTyping(() => {
+    if (data.reply) addMessage(data.reply, "bot");
+    if (data.buttons) addButtons(data.buttons);
+});
+
 
 // --------------------------------------
 // INITIAL WELCOME MESSAGE
