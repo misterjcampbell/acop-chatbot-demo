@@ -12,13 +12,12 @@
     <!-- PAGE CONTENT -->
     <div style="height: 100vh; width: 100%;"></div>
 
-
-    <!-- CORRECT SINGLE LAUNCHER -->
+    <!-- CHAT LAUNCHER -->
     <button id="chat-launcher" class="chat-launcher">
         💬
     </button>
 
-    <!-- CORRECT SINGLE CHAT WIDGET -->
+    <!-- CHAT WIDGET -->
     <div id="chat-wrapper" class="chat-wrapper hidden">
         <div class="chat-header">
             <img src="/static/acop-logo.png" class="chat-logo">
@@ -34,22 +33,10 @@
         </div>
     </div>
 
-<div class="calendar-wrapper">
-  <div class="calendar-header">
-    <button class="cal-prev">‹</button>
-    <span class="cal-title">January 2026</span>
-    <button class="cal-next">›</button>
-  </div>
-
-  <div class="calendar-grid">
-    <!-- days injected here -->
-  </div>
-</div>
     <!-- JS -->
     <script src="/static/chat-messenger.js?v=4"></script>
 
     <script>
-        // Close button functionality (you didn’t have this before)
         document.getElementById("chat-close").onclick = () => {
             document.getElementById("chat-wrapper").classList.add("hidden");
             document.getElementById("chat-launcher").style.display = "block";
