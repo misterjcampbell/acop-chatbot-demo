@@ -83,6 +83,18 @@ function addButtons(buttons) {
   scrollChat();
 }
 
+function renderCalendar(year, month) {
+  const row = document.createElement("div");
+  row.className = "msg-row bot";
+
+  const cal = document.createElement("div");
+  cal.className = "calendar-wrapper";
+
+  // (we’ll generate days here next)
+  row.appendChild(cal);
+  chatBox.appendChild(row);
+  scrollChat();
+}
 // --------------------------------------
 // TYPING INDICATOR
 // --------------------------------------
