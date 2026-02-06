@@ -216,7 +216,52 @@
 #chat-send:hover {
     background: #1647A0;
 }
+.calendar-wrapper {
+  background: #f9fafb;
+  border-radius: 14px;
+  padding: 10px;
+  width: 100%;
+  max-width: 260px;
+}
 
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.calendar-header button {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.calendar-day {
+  text-align: center;
+  padding: 6px 0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.calendar-day.disabled {
+  color: #bbb;
+  cursor: not-allowed;
+}
+
+.calendar-day.available:hover {
+  background: #0057b8;
+  color: #fff;
+}
 /* MOBILE FIXES */
 @media (max-width: 480px) {
     .chat-wrapper {
