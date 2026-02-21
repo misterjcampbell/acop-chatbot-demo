@@ -1,4 +1,4 @@
-# app.py — ACOP Booking Chatbot (Patched & Fixed)
+# app.py — ACOP Booking Chatbot (Enhanced with Email Verification & Phone Validation)
 import os
 import re
 import io
@@ -7,6 +7,7 @@ import json
 import uuid
 import sqlite3
 import smtplib
+import random
 from email.message import EmailMessage
 from datetime import datetime, timedelta
 from functools import wraps
@@ -32,6 +33,10 @@ LOCAL_TZ = pytz.timezone(os.getenv("LOCAL_TZ", "Australia/Sydney"))
 TIME_SLOTS = ["09:00", "11:00", "15:30"]
 LEAD_TIME_MINUTES = int(os.getenv("LEAD_TIME_MINUTES", "120"))  # e.g. 120 minutes
 
+# Email verification settings
+EMAIL_VERIFICATION_EXPIRY_MINUTES = 10
+EMAIL_VERIFICATION_MAX_ATTEMPTS = 3
+
 # SMTP / Mailtrap defaults (override via Render env)
 SMTP_HOST = os.getenv("SMTP_HOST", "sandbox.smtp.mailtrap.io")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "2525"))
@@ -49,7 +54,6 @@ ADMIN_PASS = os.getenv("ADMIN_PASS", "Acop2025!")
 
 # ---------------- DB helpers & init ----------------
 def get_conn():
-    # Use check_same_thread=False for potential multi-threaded WSGI, but keep default for simplicity
     return sqlite3.connect(DB_FILE)
 
 def init_db():
@@ -95,6 +99,16 @@ def init_db():
     )
     """)
 
+    # Email verification codes table
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS email_verification_codes (
+        email TEXT PRIMARY KEY,
+        code TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        attempts INTEGER DEFAULT 0
+    )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -123,7 +137,6 @@ def update_settings(**kwargs):
         if k in kwargs:
             sets.append(f"{k}=?")
             v = kwargs[k]
-            # teams_webhook is string
             if isinstance(v, bool) and k != "teams_webhook":
                 params.append(1 if v else 0)
             else:
@@ -133,6 +146,121 @@ def update_settings(**kwargs):
     sql = "UPDATE admin_settings SET " + ", ".join(sets) + " WHERE id=1"
     conn = get_conn(); cur = conn.cursor()
     cur.execute(sql, params); conn.commit(); conn.close()
+
+# ---------------- Email Verification ----------------
+def generate_verification_code():
+    """Generate a 6-digit verification code"""
+    return f"{random.randint(100000, 999999)}"
+
+def store_verification_code(email, code):
+    """Store verification code for email"""
+    conn = get_conn(); cur = conn.cursor()
+    now = datetime.now(LOCAL_TZ).isoformat()
+    cur.execute("""
+        INSERT OR REPLACE INTO email_verification_codes (email, code, created_at, attempts)
+        VALUES (?, ?, ?, 0)
+    """, (email.lower(), code, now))
+    conn.commit(); conn.close()
+
+def verify_code(email, code):
+    """
+    Verify code for email. Returns:
+    - "valid" if code matches
+    - "invalid" if code doesn't match (increments attempts)
+    - "expired" if code is too old
+    - "max_attempts" if too many failed attempts
+    """
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute("SELECT code, created_at, attempts FROM email_verification_codes WHERE email=?", (email.lower(),))
+    row = cur.fetchone()
+    
+    if not row:
+        conn.close()
+        return "invalid"
+    
+    stored_code, created_at_str, attempts = row
+    
+    # Check expiry
+    created_at = datetime.fromisoformat(created_at_str)
+    now = datetime.now(LOCAL_TZ)
+    if (now - created_at).total_seconds() > EMAIL_VERIFICATION_EXPIRY_MINUTES * 60:
+        cur.execute("DELETE FROM email_verification_codes WHERE email=?", (email.lower(),))
+        conn.commit(); conn.close()
+        return "expired"
+    
+    # Check attempts
+    if attempts >= EMAIL_VERIFICATION_MAX_ATTEMPTS:
+        conn.close()
+        return "max_attempts"
+    
+    # Verify code
+    if stored_code == code.strip():
+        # Valid - delete the code
+        cur.execute("DELETE FROM email_verification_codes WHERE email=?", (email.lower(),))
+        conn.commit(); conn.close()
+        return "valid"
+    else:
+        # Invalid - increment attempts
+        cur.execute("UPDATE email_verification_codes SET attempts = attempts + 1 WHERE email=?", (email.lower(),))
+        conn.commit(); conn.close()
+        return "invalid"
+
+def send_verification_email(email, code):
+    """Send verification code email"""
+    subj = "Your ACOP Verification Code"
+    text = f"Your verification code is: {code}\n\nThis code will expire in {EMAIL_VERIFICATION_EXPIRY_MINUTES} minutes."
+    html = f"""
+    <h3>Email Verification</h3>
+    <p>Your verification code is:</p>
+    <h2 style="background: #f0f0f0; padding: 15px; text-align: center; letter-spacing: 5px; font-family: monospace;">{code}</h2>
+    <p>This code will expire in {EMAIL_VERIFICATION_EXPIRY_MINUTES} minutes.</p>
+    <p>If you didn't request this code, please ignore this email.</p>
+    """
+    return send_email_with_attachments(email, subj, text, html=html, attachments=None)
+
+# ---------------- Australian Phone Validation ----------------
+def validate_australian_phone(phone):
+    """
+    Validate Australian phone numbers.
+    Returns: (is_valid: bool, phone_type: str|None, formatted: str|None)
+    
+    Accepts:
+    - Mobile: 04XX XXX XXX or +61 4XX XXX XXX
+    - Landline: 02/03/07/08 XXXX XXXX or +61 2/3/7/8 XXXX XXXX
+    - International: +XX XXXXXXXXXX (10-15 digits)
+    """
+    if not phone:
+        return False, None, None
+    
+    # Remove spaces, dashes, parentheses
+    cleaned = re.sub(r'[\s\-\(\)]', '', phone)
+    
+    # Mobile patterns
+    mobile_pattern = r'^(?:\+61|0)4\d{8}$'
+    if re.match(mobile_pattern, cleaned):
+        # Format: 04XX XXX XXX
+        if cleaned.startswith('+61'):
+            formatted = f"0{cleaned[3:5]} {cleaned[5:8]} {cleaned[8:]}"
+        else:
+            formatted = f"{cleaned[:4]} {cleaned[4:7]} {cleaned[7:]}"
+        return True, "mobile", formatted
+    
+    # Landline patterns (02, 03, 07, 08)
+    landline_pattern = r'^(?:\+61|0)[2378]\d{8}$'
+    if re.match(landline_pattern, cleaned):
+        # Format: 0X XXXX XXXX
+        if cleaned.startswith('+61'):
+            formatted = f"0{cleaned[3:4]} {cleaned[4:8]} {cleaned[8:]}"
+        else:
+            formatted = f"{cleaned[:2]} {cleaned[2:6]} {cleaned[6:]}"
+        return True, "landline", formatted
+    
+    # International pattern
+    international_pattern = r'^\+\d{10,15}$'
+    if re.match(international_pattern, cleaned):
+        return True, "international", cleaned
+    
+    return False, None, None
 
 # ---------------- Blocked dates ----------------
 def get_blocked_dates():
@@ -279,7 +407,6 @@ def send_email_with_attachments(to_email, subject, plain_text, html=None, attach
             try:
                 s.starttls()
             except Exception:
-                # Some test servers accept non-TLS on 2525 — ignore starttls errors but log
                 app.logger.debug("starttls failed or not supported, continuing without TLS")
             if SMTP_USER and SMTP_PASS:
                 s.login(SMTP_USER, SMTP_PASS)
@@ -486,7 +613,6 @@ def api_message():
     try:
         data = request.get_json(silent=True) or {}
         raw = data.get("message","") or ""
-        # `from_button` may be provided by the front-end when a button is clicked
         from_button = bool(data.get("from_button", False))
         msg = raw.strip()
         session_id = data.get("session_id") or request.cookies.get("sid") or str(uuid.uuid4())
@@ -496,69 +622,94 @@ def api_message():
         if "stage" not in state:
             state["stage"] = "name"
 
-        # Quick test button flow
-        if msg.lower() == "test buttons":
-            reply_payload = {
-                "text": "Pick an option:",
-                "buttons": [
-                    {"label":"Tomorrow", "value":"tomorrow"},
-                    {"label":"Next Available", "value":"next available"},
-                    {"label":"Pick a date", "value":"pick date"}
-                ]
-            }
-            resp = make_response(jsonify({"reply": reply_payload["text"], "buttons": reply_payload["buttons"], "session_id": session_id}))
-            resp.set_cookie("sid", session_id, httponly=True, samesite="Lax")
-            return resp
-
         reply = ""
 
-        # STATE MACHINE
+        # STATE MACHINE WITH EMAIL VERIFICATION & PHONE VALIDATION
         if state["stage"] == "name":
             if len(msg) < 2 or any(c.isdigit() for c in msg):
-                reply = "Please enter a valid name."
+                reply = "Please enter a valid name (at least 2 characters, no numbers)."
             else:
                 state["name"] = msg.title()
                 state["stage"] = "email"
-                reply = f"Thanks {state['name']}! What's your email?"
+                reply = f"Thanks {state['name']}! What's your email address?"
 
         elif state["stage"] == "email":
-            if "@" not in msg or "." not in msg:
-                reply = "Please enter a valid email."
+            # Basic email validation
+            if "@" not in msg or "." not in msg.split("@")[-1]:
+                reply = "Please enter a valid email address."
             else:
-                state["email"] = msg.lower()
+                email = msg.lower().strip()
+                
+                # Generate and send verification code
+                code = generate_verification_code()
+                store_verification_code(email, code)
+                
+                # Send verification email
+                try:
+                    send_verification_email(email, code)
+                    state["email"] = email
+                    state["stage"] = "email_verify"
+                    reply = f"I've sent a 6-digit verification code to {email}. Please enter the code:"
+                except Exception as e:
+                    app.logger.exception("Failed to send verification email: %s", e)
+                    reply = "Sorry, I couldn't send the verification email. Please try again or use a different email address."
+
+        elif state["stage"] == "email_verify":
+            # Verify the code
+            email = state.get("email")
+            result = verify_code(email, msg)
+            
+            if result == "valid":
                 state["stage"] = "phone"
-                reply = "Your phone number?"
+                reply = "Email verified! ✓\n\nWhat's your phone number?\n\nAccepted formats:\n• Mobile: 04XX XXX XXX\n• Landline: 02 XXXX XXXX\n• International: +XX XXXXXXXXXX"
+            elif result == "expired":
+                # Code expired - send new one
+                code = generate_verification_code()
+                store_verification_code(email, code)
+                try:
+                    send_verification_email(email, code)
+                    reply = f"That code has expired. I've sent you a new code to {email}. Please enter it:"
+                except Exception:
+                    reply = "The code has expired and I couldn't send a new one. Please start over."
+                    state["stage"] = "email"
+            elif result == "max_attempts":
+                reply = "Too many failed attempts. Please start over with your email address."
+                state["stage"] = "email"
+            else:  # invalid
+                reply = "That code is incorrect. Please try again:"
 
         elif state["stage"] == "phone":
-            cleaned = "".join(c for c in msg if c.isdigit() or c in "+ -")
-            if len(cleaned.replace(" ", "").replace("-", "")) < 8:
-                reply = "Please enter a valid phone number."
+            is_valid, phone_type, formatted = validate_australian_phone(msg)
+            
+            if not is_valid:
+                reply = "Please enter a valid Australian phone number:\n\n• Mobile: 04XX XXX XXX (e.g., 0412 345 678)\n• Landline: 02/03/07/08 XXXX XXXX (e.g., 02 9876 5432)\n• International: +XX XXXXXXXXXX"
             else:
-                state["phone"] = msg
+                state["phone"] = formatted or msg
+                state["phone_type"] = phone_type
                 state["stage"] = "date"
-                reply = "Which date? (e.g. 27/11/2025)"
+                reply = "Great! Which date would you like? (e.g., 27/11/2025 or DD/MM/YYYY)"
 
         elif state["stage"] == "date":
             parsed = parse_date(msg)
             if not parsed:
-                reply = "Use DD/MM/YYYY or YYYY-MM-DD."
+                reply = "Please use DD/MM/YYYY or YYYY-MM-DD format (e.g., 27/11/2025)."
             else:
                 if is_weekend(parsed):
                     next3 = next_available_dates(parsed)
                     if next3:
                         pretty = [datetime.strptime(d, "%Y-%m-%d").strftime("%d %B %Y") for d in next3]
-                        reply = "Bookings are only available on weekdays (Mon–Fri).\n\nNext available dates:\n" + "\n".join(f"- {p}" for p in pretty)
+                        reply = "Bookings are only available on weekdays (Mon–Fri).\n\nNext available dates:\n" + "\n".join(f"• {p}" for p in pretty)
                     else:
                         reply = "Bookings are only available on weekdays (Mon–Fri)."
                 elif is_past_date(parsed):
                     next3 = next_available_dates(datetime.now(LOCAL_TZ).date().isoformat())
                     pretty = [datetime.strptime(d, "%Y-%m-%d").strftime("%d %B %Y") for d in next3]
-                    reply = "You cannot book a past date.\n\nNext available dates:\n" + "\n".join(f"- {p}" for p in pretty)
+                    reply = "You cannot book a past date.\n\nNext available dates:\n" + "\n".join(f"• {p}" for p in pretty)
                 elif parsed in get_blocked_dates():
                     next3 = next_available_dates(parsed)
                     if next3:
                         pretty = [datetime.strptime(d, "%Y-%m-%d").strftime("%d %B %Y") for d in next3]
-                        reply = "That date is not available.\n\nNext available dates:\n" + "\n".join(f"- {p}" for p in pretty)
+                        reply = "That date is not available.\n\nNext available dates:\n" + "\n".join(f"• {p}" for p in pretty)
                     else:
                         reply = "That date is not available."
                 else:
@@ -567,7 +718,7 @@ def api_message():
                         next3 = next_available_dates(parsed)
                         if next3:
                             pretty = [datetime.strptime(d, "%Y-%m-%d").strftime("%d %B %Y") for d in next3]
-                            reply = "That day is fully booked.\n\nNext available dates:\n" + "\n".join(f"- {p}" for p in pretty)
+                            reply = "That day is fully booked.\n\nNext available dates:\n" + "\n".join(f"• {p}" for p in pretty)
                         else:
                             reply = "That day is fully booked."
                     else:
@@ -575,12 +726,11 @@ def api_message():
                         human = datetime.strptime(parsed, "%Y-%m-%d").strftime("%d %B %Y")
                         buttons = [{"label": t, "value": t} for t in free]
                         save_session(session_id, state)
-                        resp = make_response(jsonify({"reply": f"Available on {human}: {', '.join(free)}", "buttons": buttons, "session_id": session_id}))
+                        resp = make_response(jsonify({"reply": f"Available times on {human}:", "buttons": buttons, "session_id": session_id}))
                         resp.set_cookie("sid", session_id, httponly=True, samesite="Lax")
                         return resp
 
         elif state["stage"] == "time":
-            # If front-end sent from_button true and the message is the value, accept it normally.
             tnorm = normalize_time(msg) or msg.replace(".", ":")
             if tnorm not in TIME_SLOTS:
                 reply = f"Please choose from: {', '.join(TIME_SLOTS)}"
@@ -596,7 +746,7 @@ def api_message():
                             pretty.append(f"{datetime.strptime(d, '%Y-%m-%d').strftime('%d %B %Y')} — {', '.join(free)}")
                             if len(pretty) >= 3:
                                 break
-                    reply = f"Too late to book that time — you need at least {LEAD_TIME_MINUTES} minutes notice.\n\nNext available:\n" + "\n".join(f"- {p}" for p in pretty)
+                    reply = f"Too late to book that time — you need at least {LEAD_TIME_MINUTES} minutes notice.\n\nNext available:\n" + "\n".join(f"• {p}" for p in pretty)
                 else:
                     reply = f"Too late to book that time — you need at least {LEAD_TIME_MINUTES} minutes notice."
             else:
@@ -614,7 +764,7 @@ def api_message():
                 except Exception:
                     app.logger.exception("admin notify failed")
                 human = datetime.strptime(state.get("date"), "%Y-%m-%d").strftime("%d %B %Y")
-                reply = f"Confirmed! Your call is on {human} at {tnorm}\n\nType 'cancel' to change."
+                reply = f"✓ Confirmed!\n\nYour assessment call is scheduled for:\n{human} at {tnorm}\n\nYou'll receive a confirmation email shortly.\n\n(Type 'cancel' if you need to change this)"
                 # clear session from DB
                 delete_session(session_id)
                 # return response
@@ -623,14 +773,13 @@ def api_message():
                 return resp
 
         else:
-            reply = "Sorry — something went wrong. Please try again."
+            reply = "Sorry — something went wrong. Please type 'restart' to start over."
 
         # persist state
         save_session(session_id, state)
 
-        # Build response (support dict reply)
+        # Build response
         if isinstance(reply, dict):
-            # convert structured reply to response
             response = {
                 "reply": reply.get("text", ""),
                 "buttons": reply.get("buttons", []),
@@ -645,7 +794,7 @@ def api_message():
 
     except Exception as e:
         app.logger.exception("chat error: %s", e)
-        return jsonify({"reply": "Server error. Please try again."}), 500
+        return jsonify({"reply": "Server error. Please try again or type 'restart'."}), 500
 
 # ---------------- Run ----------------
 if __name__ == "__main__":
