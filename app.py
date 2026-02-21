@@ -321,6 +321,27 @@ def delete_booking(bid):
     conn = get_conn(); cur = conn.cursor()
     cur.execute("DELETE FROM bookings WHERE id=?", (bid,)); conn.commit(); conn.close()
 
+def find_bookings_by_email(email):
+    """Find all future bookings for an email address"""
+    conn = get_conn(); cur = conn.cursor()
+    today = datetime.now(LOCAL_TZ).date().isoformat()
+    cur.execute("""
+        SELECT id, name, email, phone, date, time, created_at 
+        FROM bookings 
+        WHERE email=? AND date >= ?
+        ORDER BY date, time
+    """, (email.lower(), today))
+    rows = cur.fetchall(); conn.close()
+    return rows
+
+def send_cancellation_email(name, email, date_iso, time_str):
+    """Send email confirmation of cancellation"""
+    pretty = datetime.strptime(date_iso, "%Y-%m-%d").strftime("%d %B %Y")
+    subj = "ACOP Assessment Call - Cancelled"
+    text = f"Hi {name},\n\nYour assessment call scheduled for {pretty} at {time_str} has been cancelled.\n\nIf you need to book a new appointment, please use the booking assistant.\n\n— ACOP Team"
+    html = f"<h3>Hi {name}!</h3><p>Your assessment call scheduled for <strong>{pretty} at {time_str}</strong> has been cancelled.</p><p>If you need to book a new appointment, please use the booking assistant.</p>"
+    return send_email_with_attachments(email, subj, text, html=html, attachments=None)
+
 # ---------------- Date/time parsing & rules ----------------
 _time_re = re.compile(r'^\s*(\d{1,2})(?::|\.|)?(\d{2})?\s*(am|pm|a\.m\.|p\.m\.)?\s*$', re.I)
 def normalize_time(s):
@@ -623,9 +644,179 @@ def api_message():
             state["stage"] = "name"
 
         reply = ""
+        
+        # Check for cancel/reschedule commands (can interrupt any stage)
+        msg_lower = msg.lower().strip()
+        if msg_lower in ("cancel", "reschedule", "change", "modify") and state["stage"] not in ("cancel_email", "cancel_confirm", "reschedule_confirm"):
+            # Start cancel/reschedule flow
+            state["cancel_action"] = "cancel" if msg_lower == "cancel" else "reschedule"
+            state["stage"] = "cancel_email"
+            state["previous_stage"] = state.get("stage", "name")  # Save where they were
+            reply = "What's the email address for your booking?"
+            save_session(session_id, state)
+            resp = make_response(jsonify({"reply": reply, "session_id": session_id}))
+            resp.set_cookie("sid", session_id, httponly=True, samesite="Lax")
+            return resp
+        
+        # Check for restart command
+        if msg_lower in ("restart", "start over", "begin again"):
+            delete_session(session_id)
+            state = {"stage": "name"}
+            reply = "Let's start fresh! What's your name?"
+            save_session(session_id, state)
+            resp = make_response(jsonify({"reply": reply, "session_id": session_id}))
+            resp.set_cookie("sid", session_id, httponly=True, samesite="Lax")
+            return resp
 
         # STATE MACHINE WITH EMAIL VERIFICATION & PHONE VALIDATION
-        if state["stage"] == "name":
+        if state["stage"] == "cancel_email":
+            # Looking up booking by email
+            if "@" not in msg or "." not in msg.split("@")[-1]:
+                reply = "Please enter a valid email address."
+            else:
+                email = msg.lower().strip()
+                bookings = find_bookings_by_email(email)
+                
+                if not bookings:
+                    reply = f"No upcoming bookings found for {email}.\n\nWould you like to make a new booking instead? Type 'yes' or 'restart'."
+                    state["stage"] = "name"  # Reset to start
+                elif len(bookings) == 1:
+                    # One booking found
+                    booking = bookings[0]
+                    state["cancel_booking_id"] = booking[0]
+                    state["cancel_booking_data"] = {
+                        "name": booking[1],
+                        "email": booking[2],
+                        "phone": booking[3],
+                        "date": booking[4],
+                        "time": booking[5]
+                    }
+                    pretty_date = datetime.strptime(booking[4], "%Y-%m-%d").strftime("%d %B %Y")
+                    
+                    action = state.get("cancel_action", "cancel")
+                    if action == "cancel":
+                        state["stage"] = "cancel_confirm"
+                        buttons = [
+                            {"label": "Yes, cancel it", "value": "confirm_cancel"},
+                            {"label": "Keep booking", "value": "keep_booking"}
+                        ]
+                        save_session(session_id, state)
+                        resp = make_response(jsonify({
+                            "reply": f"Found your booking:\n{pretty_date} at {booking[5]}\n\nAre you sure you want to cancel?",
+                            "buttons": buttons,
+                            "session_id": session_id
+                        }))
+                        resp.set_cookie("sid", session_id, httponly=True, samesite="Lax")
+                        return resp
+                    else:  # reschedule
+                        state["stage"] = "reschedule_confirm"
+                        buttons = [
+                            {"label": "Yes, pick new time", "value": "confirm_reschedule"},
+                            {"label": "Keep current booking", "value": "keep_booking"}
+                        ]
+                        save_session(session_id, state)
+                        resp = make_response(jsonify({
+                            "reply": f"Your current booking:\n{pretty_date} at {booking[5]}\n\nWould you like to reschedule?",
+                            "buttons": buttons,
+                            "session_id": session_id
+                        }))
+                        resp.set_cookie("sid", session_id, httponly=True, samesite="Lax")
+                        return resp
+                else:
+                    # Multiple bookings found
+                    reply = f"Found {len(bookings)} bookings for {email}:\n\n"
+                    for i, b in enumerate(bookings, 1):
+                        pretty = datetime.strptime(b[4], "%Y-%m-%d").strftime("%d %B %Y")
+                        reply += f"{i}. {pretty} at {b[5]}\n"
+                    reply += "\nPlease contact us directly to manage multiple bookings."
+                    state["stage"] = "name"  # Reset
+        
+        elif state["stage"] == "cancel_confirm":
+            if msg.lower() == "confirm_cancel" or msg.lower() in ("yes", "confirm", "y"):
+                # Actually cancel the booking
+                booking_id = state.get("cancel_booking_id")
+                booking_data = state.get("cancel_booking_data", {})
+                
+                if booking_id:
+                    try:
+                        # Delete from database
+                        delete_booking(booking_id)
+                        
+                        # Send cancellation email
+                        try:
+                            send_cancellation_email(
+                                booking_data.get("name"),
+                                booking_data.get("email"),
+                                booking_data.get("date"),
+                                booking_data.get("time")
+                            )
+                        except Exception:
+                            app.logger.exception("cancellation email failed")
+                        
+                        pretty_date = datetime.strptime(booking_data.get("date"), "%Y-%m-%d").strftime("%d %B %Y")
+                        reply = f"✓ Your booking for {pretty_date} at {booking_data.get('time')} has been cancelled.\n\nYou'll receive a confirmation email shortly.\n\n(Type 'restart' to book a new appointment)"
+                        
+                        # Clear session
+                        delete_session(session_id)
+                        resp = make_response(jsonify({"reply": reply, "session_id": session_id}))
+                        resp.set_cookie("sid", session_id, httponly=True, samesite="Lax")
+                        return resp
+                    except Exception as e:
+                        app.logger.exception("cancel failed: %s", e)
+                        reply = "Sorry, something went wrong. Please try again or contact us directly."
+                        state["stage"] = "name"
+                else:
+                    reply = "Booking not found. Type 'cancel' to try again."
+                    state["stage"] = "name"
+            elif msg.lower() == "keep_booking" or msg.lower() in ("no", "n", "keep"):
+                booking_data = state.get("cancel_booking_data", {})
+                pretty_date = datetime.strptime(booking_data.get("date"), "%Y-%m-%d").strftime("%d %B %Y")
+                reply = f"No problem! Your booking for {pretty_date} at {booking_data.get('time')} is still confirmed.\n\n(Type 'restart' if you need anything else)"
+                delete_session(session_id)
+                resp = make_response(jsonify({"reply": reply, "session_id": session_id}))
+                resp.set_cookie("sid", session_id, httponly=True, samesite="Lax")
+                return resp
+            else:
+                reply = "Please click a button or type 'yes' to confirm cancellation, or 'no' to keep your booking."
+        
+        elif state["stage"] == "reschedule_confirm":
+            if msg.lower() == "confirm_reschedule" or msg.lower() in ("yes", "confirm", "y"):
+                # Start reschedule flow - delete old booking and start new booking
+                booking_id = state.get("cancel_booking_id")
+                booking_data = state.get("cancel_booking_data", {})
+                
+                if booking_id:
+                    try:
+                        # Delete old booking
+                        delete_booking(booking_id)
+                        
+                        # Prepare for new booking with saved data
+                        state["name"] = booking_data.get("name")
+                        state["email"] = booking_data.get("email")
+                        state["phone"] = booking_data.get("phone")
+                        state["stage"] = "date"
+                        
+                        reply = "Great! Let's pick a new date and time.\n\nWhich date would you like? (e.g., 27/11/2025)"
+                        
+                    except Exception as e:
+                        app.logger.exception("reschedule failed: %s", e)
+                        reply = "Sorry, something went wrong. Please try again."
+                        state["stage"] = "name"
+                else:
+                    reply = "Booking not found. Type 'reschedule' to try again."
+                    state["stage"] = "name"
+            elif msg.lower() == "keep_booking" or msg.lower() in ("no", "n", "keep"):
+                booking_data = state.get("cancel_booking_data", {})
+                pretty_date = datetime.strptime(booking_data.get("date"), "%Y-%m-%d").strftime("%d %B %Y")
+                reply = f"No problem! Your booking for {pretty_date} at {booking_data.get('time')} is still confirmed.\n\n(Type 'restart' if you need anything else)"
+                delete_session(session_id)
+                resp = make_response(jsonify({"reply": reply, "session_id": session_id}))
+                resp.set_cookie("sid", session_id, httponly=True, samesite="Lax")
+                return resp
+            else:
+                reply = "Please click a button or type 'yes' to reschedule, or 'no' to keep your current booking."
+        
+        elif state["stage"] == "name":
             if len(msg) < 2 or any(c.isdigit() for c in msg):
                 reply = "Please enter a valid name (at least 2 characters, no numbers)."
             else:
