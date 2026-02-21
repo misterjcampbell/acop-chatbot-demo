@@ -5,20 +5,177 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ACOP Booking Assistant</title>
 
-    <link rel="stylesheet" href="/static/chat-messenger.css?v=4">
+    <link rel="stylesheet" href="/static/chat-messenger.css?v=5">
+    <style>
+        /* Verification Code Input Styles */
+        .verification-input-wrapper {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin: 15px 0;
+            padding: 10px;
+        }
+
+        .verification-input {
+            width: 45px;
+            height: 55px;
+            font-size: 24px;
+            font-weight: 600;
+            text-align: center;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            outline: none;
+            transition: all 0.2s ease;
+            font-family: 'Courier New', monospace;
+            background: white;
+        }
+
+        .verification-input:focus {
+            border-color: #004cbf;
+            box-shadow: 0 0 0 3px rgba(0, 76, 191, 0.1);
+            transform: scale(1.05);
+        }
+
+        .verification-input.filled {
+            background: #f0f7ff;
+            border-color: #004cbf;
+        }
+
+        .verification-input.error {
+            border-color: #dc3545;
+            background: #fff5f5;
+            animation: shake 0.3s ease;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        /* Status indicators */
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 500;
+            margin-left: 8px;
+        }
+
+        .status-verified {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        /* Enhanced button for verification */
+        .verify-button {
+            background: #004cbf;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 10px;
+        }
+
+        .verify-button:hover {
+            background: #003a8c;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 76, 191, 0.3);
+        }
+
+        .verify-button:active {
+            transform: translateY(0);
+        }
+
+        .verify-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Resend code link */
+        .resend-code {
+            color: #004cbf;
+            text-decoration: none;
+            font-size: 13px;
+            margin-top: 10px;
+            display: inline-block;
+            cursor: pointer;
+        }
+
+        .resend-code:hover {
+            text-decoration: underline;
+        }
+
+        /* Progress indicator */
+        .progress-steps {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin: 10px 0;
+            padding: 8px;
+        }
+
+        .progress-step {
+            width: 30px;
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+            transition: background 0.3s ease;
+        }
+
+        .progress-step.active {
+            background: #004cbf;
+        }
+
+        .progress-step.completed {
+            background: #28a745;
+        }
+
+        /* Phone format hint */
+        .format-hint {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 3px solid #004cbf;
+        }
+
+        /* Enhanced message styling */
+        .message-content.verified::after {
+            content: "✓";
+            display: inline-block;
+            margin-left: 6px;
+            color: #28a745;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
 
     <!-- PAGE CONTENT -->
     <div style="height: 100vh; width: 100%;"></div>
 
-
-    <!-- CORRECT SINGLE LAUNCHER -->
+    <!-- CHAT LAUNCHER -->
     <button id="chat-launcher" class="chat-launcher">
         💬
     </button>
 
-    <!-- CORRECT SINGLE CHAT WIDGET -->
+    <!-- CHAT WIDGET -->
     <div id="chat-wrapper" class="chat-wrapper hidden">
         <div class="chat-header">
             <img src="/static/acop-logo.png" class="chat-logo">
@@ -34,16 +191,278 @@
         </div>
     </div>
 
-
     <!-- JS -->
-    <script src="/static/chat-messenger.js?v=4"></script>
+    <script src="/static/chat-messenger.js?v=5"></script>
 
     <script>
-        // Close button functionality (you didn’t have this before)
-        document.getElementById("chat-close").onclick = () => {
-            document.getElementById("chat-wrapper").classList.add("hidden");
-            document.getElementById("chat-launcher").style.display = "block";
-        };
+        // Enhanced chat functionality with verification code support
+        (function() {
+            const chatWrapper = document.getElementById("chat-wrapper");
+            const chatMessages = document.getElementById("chat-messages");
+            const chatInput = document.getElementById("chat-input");
+            const chatSend = document.getElementById("chat-send");
+            const chatLauncher = document.getElementById("chat-launcher");
+            const chatClose = document.getElementById("chat-close");
+
+            let sessionId = null;
+            let currentStage = "name";
+            let verificationCodeInputActive = false;
+
+            // Track conversation stage for UI enhancements
+            function detectStage(botMessage) {
+                const msg = botMessage.toLowerCase();
+                
+                if (msg.includes("verification code") && msg.includes("enter")) {
+                    return "email_verify";
+                } else if (msg.includes("email verified") || msg.includes("✓")) {
+                    return "phone";
+                } else if (msg.includes("phone number")) {
+                    return "phone";
+                } else if (msg.includes("which date")) {
+                    return "date";
+                } else if (msg.includes("available") && msg.includes("time")) {
+                    return "time";
+                }
+                return null;
+            }
+
+            // Create verification code input
+            function createVerificationInput() {
+                const wrapper = document.createElement("div");
+                wrapper.className = "verification-input-wrapper";
+                wrapper.id = "verification-wrapper";
+
+                for (let i = 0; i < 6; i++) {
+                    const input = document.createElement("input");
+                    input.type = "text";
+                    input.maxLength = 1;
+                    input.className = "verification-input";
+                    input.dataset.index = i;
+                    
+                    // Auto-focus next input
+                    input.addEventListener("input", (e) => {
+                        const value = e.target.value;
+                        if (value.length === 1 && i < 5) {
+                            const nextInput = wrapper.querySelector(`[data-index="${i + 1}"]`);
+                            if (nextInput) nextInput.focus();
+                        }
+                        e.target.classList.add("filled");
+                        
+                        // Auto-submit when all 6 digits entered
+                        checkAndSubmitCode(wrapper);
+                    });
+
+                    // Handle backspace
+                    input.addEventListener("keydown", (e) => {
+                        if (e.key === "Backspace" && !e.target.value && i > 0) {
+                            const prevInput = wrapper.querySelector(`[data-index="${i - 1}"]`);
+                            if (prevInput) {
+                                prevInput.focus();
+                                prevInput.value = "";
+                                prevInput.classList.remove("filled");
+                            }
+                        }
+                    });
+
+                    // Only allow numbers
+                    input.addEventListener("keypress", (e) => {
+                        if (!/[0-9]/.test(e.key)) {
+                            e.preventDefault();
+                        }
+                    });
+
+                    wrapper.appendChild(input);
+                }
+
+                return wrapper;
+            }
+
+            // Check if all 6 digits entered and auto-submit
+            function checkAndSubmitCode(wrapper) {
+                const inputs = wrapper.querySelectorAll(".verification-input");
+                const code = Array.from(inputs).map(input => input.value).join("");
+                
+                if (code.length === 6) {
+                    // Wait a moment for visual feedback
+                    setTimeout(() => {
+                        sendMessage(code, false);
+                    }, 300);
+                }
+            }
+
+            // Show error on verification inputs
+            function showVerificationError(wrapper) {
+                const inputs = wrapper.querySelectorAll(".verification-input");
+                inputs.forEach(input => {
+                    input.classList.add("error");
+                    setTimeout(() => {
+                        input.classList.remove("error");
+                        input.value = "";
+                        input.classList.remove("filled");
+                    }, 500);
+                });
+                // Focus first input
+                inputs[0].focus();
+            }
+
+            // Add phone format hint
+            function addPhoneFormatHint() {
+                const hint = document.createElement("div");
+                hint.className = "format-hint";
+                hint.innerHTML = `
+                    <strong>Accepted formats:</strong><br>
+                    • Mobile: 0412 345 678<br>
+                    • Landline: 02 9876 5432<br>
+                    • International: +61 412 345 678
+                `;
+                return hint;
+            }
+
+            // Enhanced message display
+            function displayBotMessage(text, buttons) {
+                const msgDiv = document.createElement("div");
+                msgDiv.className = "message bot-message";
+                
+                const contentDiv = document.createElement("div");
+                contentDiv.className = "message-content";
+                contentDiv.textContent = text;
+                msgDiv.appendChild(contentDiv);
+
+                chatMessages.appendChild(msgDiv);
+
+                // Detect stage and add appropriate UI enhancements
+                const stage = detectStage(text);
+                
+                if (stage === "email_verify") {
+                    // Add verification code input
+                    const verificationInput = createVerificationInput();
+                    msgDiv.appendChild(verificationInput);
+                    verificationCodeInputActive = true;
+                    
+                    // Hide regular input, focus first verification box
+                    chatInput.style.display = "none";
+                    chatSend.style.display = "none";
+                    setTimeout(() => {
+                        verificationInput.querySelector('[data-index="0"]').focus();
+                    }, 100);
+                    
+                } else if (stage === "phone") {
+                    // Re-enable regular input if it was disabled
+                    chatInput.style.display = "block";
+                    chatSend.style.display = "block";
+                    verificationCodeInputActive = false;
+                    
+                    // Add phone format hint
+                    const hint = addPhoneFormatHint();
+                    msgDiv.appendChild(hint);
+                    
+                } else if (verificationCodeInputActive && text.includes("incorrect")) {
+                    // Code was wrong - shake the inputs
+                    const wrapper = document.getElementById("verification-wrapper");
+                    if (wrapper) {
+                        showVerificationError(wrapper);
+                    }
+                } else if (verificationCodeInputActive && (text.includes("verified") || text.includes("✓"))) {
+                    // Code was correct - re-enable normal input
+                    chatInput.style.display = "block";
+                    chatSend.style.display = "block";
+                    verificationCodeInputActive = false;
+                }
+
+                // Add buttons if provided
+                if (buttons && buttons.length > 0) {
+                    const btnContainer = document.createElement("div");
+                    btnContainer.className = "button-container";
+                    buttons.forEach(btn => {
+                        const button = document.createElement("button");
+                        button.className = "chat-button";
+                        button.textContent = btn.label;
+                        button.onclick = () => sendMessage(btn.value, true);
+                        btnContainer.appendChild(button);
+                    });
+                    msgDiv.appendChild(btnContainer);
+                }
+
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            function displayUserMessage(text) {
+                const msgDiv = document.createElement("div");
+                msgDiv.className = "message user-message";
+                
+                const contentDiv = document.createElement("div");
+                contentDiv.className = "message-content";
+                contentDiv.textContent = text;
+                msgDiv.appendChild(contentDiv);
+
+                chatMessages.appendChild(msgDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            async function sendMessage(message, fromButton = false) {
+                if (!message.trim() && !fromButton) return;
+
+                // Display user message (unless it's auto-submitted verification code)
+                if (!verificationCodeInputActive || message.length !== 6) {
+                    displayUserMessage(message);
+                }
+                
+                chatInput.value = "";
+                chatInput.disabled = true;
+                chatSend.disabled = true;
+
+                try {
+                    const response = await fetch("/api/message", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            message: message,
+                            session_id: sessionId,
+                            from_button: fromButton
+                        })
+                    });
+
+                    const data = await response.json();
+                    sessionId = data.session_id;
+
+                    displayBotMessage(data.reply, data.buttons || []);
+
+                } catch (error) {
+                    console.error("Error:", error);
+                    displayBotMessage("Sorry, something went wrong. Please try again.");
+                } finally {
+                    chatInput.disabled = false;
+                    chatSend.disabled = false;
+                    if (!verificationCodeInputActive) {
+                        chatInput.focus();
+                    }
+                }
+            }
+
+            // Event listeners
+            chatSend.onclick = () => sendMessage(chatInput.value);
+            chatInput.onkeypress = (e) => {
+                if (e.key === "Enter") sendMessage(chatInput.value);
+            };
+
+            chatLauncher.onclick = () => {
+                chatWrapper.classList.remove("hidden");
+                chatLauncher.style.display = "none";
+                
+                // Send initial greeting if first time
+                if (chatMessages.children.length === 0) {
+                    displayBotMessage("Hi! I'm here to help you book an assessment call. What's your name?");
+                }
+                
+                chatInput.focus();
+            };
+
+            chatClose.onclick = () => {
+                chatWrapper.classList.add("hidden");
+                chatLauncher.style.display = "block";
+            };
+
+        })();
     </script>
 
 </body>
