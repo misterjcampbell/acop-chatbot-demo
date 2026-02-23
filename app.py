@@ -342,6 +342,85 @@ def send_cancellation_email(name, email, date_iso, time_str):
     html = f"<h3>Hi {name}!</h3><p>Your assessment call scheduled for <strong>{pretty} at {time_str}</strong> has been cancelled.</p><p>If you need to book a new appointment, please use the booking assistant.</p>"
     return send_email_with_attachments(email, subj, text, html=html, attachments=None)
 
+def send_reminder_email(name, email, date_iso, time_str, hours_before):
+    """Send reminder email before appointment"""
+    pretty = datetime.strptime(date_iso, "%Y-%m-%d").strftime("%d %B %Y")
+    
+    if hours_before == 24:
+        subj = "Reminder: Your ACOP Assessment Call Tomorrow"
+        text = f"Hi {name},\n\nThis is a reminder that your assessment call is scheduled for tomorrow:\n\n{pretty} at {time_str}\n\nIf you need to reschedule, please use the booking assistant or contact us.\n\n— ACOP Team"
+        html = f"<h3>Hi {name}!</h3><p>This is a reminder that your assessment call is scheduled for <strong>tomorrow</strong>:</p><p style='font-size: 18px; background: #f0f7ff; padding: 15px; border-left: 4px solid #004cbf;'>{pretty} at {time_str}</p><p>If you need to reschedule, please use the booking assistant or contact us.</p>"
+    else:  # 1 hour
+        subj = "Reminder: Your ACOP Assessment Call in 1 Hour"
+        text = f"Hi {name},\n\nYour assessment call is in 1 hour:\n\n{time_str} today\n\nWe'll call you at: {get_booking_phone(email)}\n\nIf you're unable to make it, please contact us as soon as possible.\n\n— ACOP Team"
+        html = f"<h3>Hi {name}!</h3><p>Your assessment call is in <strong>1 hour</strong>:</p><p style='font-size: 18px; background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107;'>{time_str} today</p><p>If you're unable to make it, please contact us as soon as possible.</p>"
+    
+    return send_email_with_attachments(email, subj, text, html=html, attachments=None)
+
+def get_booking_phone(email):
+    """Get phone number for a booking by email (for reminder)"""
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute("SELECT phone FROM bookings WHERE email=? LIMIT 1", (email.lower(),))
+    row = cur.fetchone(); conn.close()
+    return row[0] if row else ""
+
+def send_all_reminders():
+    """
+    Send reminder emails for upcoming bookings.
+    Should be called by a scheduled job (cron/scheduler).
+    Returns dict with counts of emails sent.
+    """
+    now = datetime.now(LOCAL_TZ)
+    tomorrow = (now + timedelta(days=1)).date()
+    in_one_hour = now + timedelta(hours=1)
+    
+    results = {"24hr": 0, "1hr": 0, "errors": []}
+    
+    conn = get_conn(); cur = conn.cursor()
+    
+    # Find bookings for tomorrow (24hr reminder)
+    cur.execute("""
+        SELECT id, name, email, phone, date, time 
+        FROM bookings 
+        WHERE date = ?
+    """, (tomorrow.isoformat(),))
+    tomorrow_bookings = cur.fetchall()
+    
+    for booking in tomorrow_bookings:
+        try:
+            send_reminder_email(booking[1], booking[2], booking[4], booking[5], 24)
+            results["24hr"] += 1
+        except Exception as e:
+            results["errors"].append(f"24hr reminder failed for {booking[2]}: {str(e)}")
+            app.logger.exception("24hr reminder failed")
+    
+    # Find bookings in approximately 1 hour (1hr reminder)
+    # Check bookings happening between 50-70 minutes from now
+    cur.execute("""
+        SELECT id, name, email, phone, date, time 
+        FROM bookings 
+        WHERE date = ?
+    """, (now.date().isoformat(),))
+    today_bookings = cur.fetchall()
+    
+    for booking in today_bookings:
+        try:
+            # Parse booking time
+            booking_dt = datetime.strptime(f"{booking[4]} {booking[5]}", "%Y-%m-%d %H:%M")
+            booking_dt = LOCAL_TZ.localize(booking_dt)
+            
+            # Check if booking is in 50-70 minutes
+            minutes_until = (booking_dt - now).total_seconds() / 60
+            if 50 <= minutes_until <= 70:
+                send_reminder_email(booking[1], booking[2], booking[4], booking[5], 1)
+                results["1hr"] += 1
+        except Exception as e:
+            results["errors"].append(f"1hr reminder failed for {booking[2]}: {str(e)}")
+            app.logger.exception("1hr reminder failed")
+    
+    conn.close()
+    return results
+
 # ---------------- Date/time parsing & rules ----------------
 _time_re = re.compile(r'^\s*(\d{1,2})(?::|\.|)?(\d{2})?\s*(am|pm|a\.m\.|p\.m\.)?\s*$', re.I)
 def normalize_time(s):
@@ -600,6 +679,22 @@ def admin_test_teams():
     try: requests.post(webhook, json={"text":"ACOP test message"}, timeout=6); return "OK"
     except Exception:
         return "FAIL"
+
+@app.route("/admin/send-reminders")
+@require_admin
+def admin_send_reminders():
+    """Manually trigger reminder emails (or can be called by cron)"""
+    try:
+        results = send_all_reminders()
+        return jsonify({
+            "success": True,
+            "24hr_sent": results["24hr"],
+            "1hr_sent": results["1hr"],
+            "errors": results["errors"]
+        })
+    except Exception as e:
+        app.logger.exception("send reminders failed")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 # ---------------- Chat session persistence (DB-backed) ----------------
 def load_session(sid):
@@ -941,27 +1036,77 @@ def api_message():
                 else:
                     reply = f"Too late to book that time — you need at least {LEAD_TIME_MINUTES} minutes notice."
             else:
+                # Time is valid - move to confirmation stage
+                state["selected_time"] = tnorm
+                state["stage"] = "confirm"
+                
+                human_date = datetime.strptime(state.get("date"), "%Y-%m-%d").strftime("%A, %d %B %Y")
+                
+                # Create confirmation message with summary
+                confirmation_msg = f"Perfect! Let me confirm your details:\n\n"
+                confirmation_msg += f"📅 Date: {human_date}\n"
+                confirmation_msg += f"🕐 Time: {tnorm}\n"
+                confirmation_msg += f"👤 Name: {state.get('name')}\n"
+                confirmation_msg += f"📧 Email: {state.get('email')}\n"
+                confirmation_msg += f"📱 Phone: {state.get('phone')}\n\n"
+                confirmation_msg += f"Is this correct?"
+                
+                buttons = [
+                    {"label": "✓ Yes, book it", "value": "confirm_yes"},
+                    {"label": "✗ No, start over", "value": "confirm_no"}
+                ]
+                
+                save_session(session_id, state)
+                resp = make_response(jsonify({
+                    "reply": confirmation_msg,
+                    "buttons": buttons,
+                    "session_id": session_id
+                }))
+                resp.set_cookie("sid", session_id, httponly=True, samesite="Lax")
+                return resp
+        
+        elif state["stage"] == "confirm":
+            # Confirmation stage - actually create the booking
+            if msg.lower() in ("confirm_yes", "yes", "y", "confirm", "correct"):
                 # All good — create booking
+                tnorm = state.get("selected_time")
                 bid = save_booking(state.get("name"), state.get("email"), state.get("phone"), state.get("date"), tnorm)
                 booking_row = get_booking(bid)
+                
                 # send confirmation email (non-fatal)
                 try:
                     send_confirmation_email(state.get("name"), state.get("email"), state.get("phone"), state.get("date"), tnorm)
                 except Exception:
                     app.logger.exception("confirmation email failed")
+                
                 # notify admin
                 try:
                     notify_on_booking(booking_row)
                 except Exception:
                     app.logger.exception("admin notify failed")
+                
                 human = datetime.strptime(state.get("date"), "%Y-%m-%d").strftime("%d %B %Y")
-                reply = f"✓ Confirmed!\n\nYour assessment call is scheduled for:\n{human} at {tnorm}\n\nYou'll receive a confirmation email shortly.\n\n(Type 'cancel' if you need to change this)"
+                reply = f"✓ Confirmed!\n\nYour assessment call is scheduled for:\n{human} at {tnorm}\n\nYou'll receive a confirmation email shortly.\n\nReminders will be sent:\n• 24 hours before\n• 1 hour before\n\n(Type 'cancel' if you need to change this)"
+                
                 # clear session from DB
                 delete_session(session_id)
+                
                 # return response
                 resp = make_response(jsonify({"reply": reply, "session_id": session_id}))
                 resp.set_cookie("sid", session_id, httponly=True, samesite="Lax")
                 return resp
+            
+            elif msg.lower() in ("confirm_no", "no", "n", "incorrect", "wrong"):
+                # Start over
+                reply = "No problem! Let's start fresh.\n\nWhat's your name?"
+                state = {"stage": "name"}
+                save_session(session_id, state)
+                resp = make_response(jsonify({"reply": reply, "session_id": session_id}))
+                resp.set_cookie("sid", session_id, httponly=True, samesite="Lax")
+                return resp
+            
+            else:
+                reply = "Please click a button or type 'yes' to confirm, or 'no' to start over."
 
         else:
             reply = "Sorry — something went wrong. Please type 'restart' to start over."
